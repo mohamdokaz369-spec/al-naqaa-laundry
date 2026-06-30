@@ -11,11 +11,14 @@ type Order = {
   address: string;
   service_type: string;
   status: string;
-  pickup_date: string;
-  pickup_time: string;
-  expected_delivery_time: string;
+  pickup_date: string | null;
+  pickup_time: string | null;
+  expected_delivery_time: string | null;
   created_at: string;
 };
+
+const ADMIN_PASSWORD =
+  process.env.NEXT_PUBLIC_ADMIN_PASSWORD || "AlNaqaaAdmin2026";
 
 const statuses = [
   { value: "pending", label: "بانتظار الاستلام" },
@@ -41,11 +44,21 @@ function todayDate() {
   return new Date().toISOString().split("T")[0];
 }
 
+function validDateValue(value: string | null) {
+  return value && value.includes("-") ? value : "";
+}
+
+function validDateTimeValue(value: string | null) {
+  return value && value.includes("-") ? value.slice(0, 16) : "";
+}
+
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(todayDate());
   const [searchTerm, setSearchTerm] = useState("");
+  const [password, setPassword] = useState("");
+  const [authenticated, setAuthenticated] = useState(false);
 
   async function fetchOrders() {
     const { data, error } = await supabase
@@ -70,7 +83,7 @@ export default function AdminOrdersPage() {
   ) {
     const { error } = await supabase
       .from("orders")
-      .update({ [field]: value })
+      .update({ [field]: value || null })
       .eq("id", id);
 
     if (error) {
@@ -90,7 +103,9 @@ export default function AdminOrdersPage() {
 
     return orders.filter((order) => {
       const orderDate =
-        order.pickup_date || order.created_at?.split("T")[0] || "";
+        validDateValue(order.pickup_date) ||
+        order.created_at?.split("T")[0] ||
+        "";
 
       const matchesDate = selectedDate ? orderDate === selectedDate : true;
 
@@ -134,6 +149,52 @@ export default function AdminOrdersPage() {
     };
   }, [orders, filteredOrders]);
 
+  const calendarDates = Array.from(
+    new Set(
+      orders
+        .map(
+          (order) =>
+            validDateValue(order.pickup_date) ||
+            order.created_at?.split("T")[0]
+        )
+        .filter(Boolean)
+    )
+  ).sort();
+
+  if (!authenticated) {
+    return (
+      <div
+        dir="rtl"
+        className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-white"
+      >
+        <div className="w-full max-w-md rounded-2xl bg-white/10 p-6">
+          <h1 className="mb-4 text-2xl font-bold">تسجيل دخول الإدارة</h1>
+
+          <input
+            type="password"
+            placeholder="كلمة السر"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="mb-4 w-full rounded-lg bg-slate-800 p-3 text-white"
+          />
+
+          <button
+            onClick={() => {
+              if (password === ADMIN_PASSWORD) {
+                setAuthenticated(true);
+              } else {
+                alert("كلمة السر غير صحيحة");
+              }
+            }}
+            className="w-full rounded-lg bg-cyan-600 p-3 font-bold"
+          >
+            دخول
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div dir="rtl" className="min-h-screen bg-slate-950 p-6 text-white">
       <h1 className="mb-6 text-3xl font-bold">لوحة طلبات مغسلة النقاء</h1>
@@ -162,6 +223,37 @@ export default function AdminOrdersPage() {
         <div className="rounded-xl bg-white/10 p-4">
           <p className="text-sm text-slate-300">جاهز للتسليم</p>
           <p className="text-3xl font-bold">{stats.ready}</p>
+        </div>
+      </div>
+
+      <div className="mb-6 rounded-xl bg-white/10 p-4">
+        <h2 className="mb-4 text-xl font-bold">رزنامة الطلبات</h2>
+
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-7">
+          {calendarDates.map((date) => {
+            const count = orders.filter((order) => {
+              const orderDate =
+                validDateValue(order.pickup_date) ||
+                order.created_at?.split("T")[0] ||
+                "";
+              return orderDate === date;
+            }).length;
+
+            return (
+              <button
+                key={date}
+                onClick={() => setSelectedDate(date)}
+                className={`rounded-xl p-4 text-right ${
+                  selectedDate === date
+                    ? "bg-cyan-600"
+                    : "bg-slate-800 hover:bg-slate-700"
+                }`}
+              >
+                <p className="font-bold">{date}</p>
+                <p className="text-sm text-slate-200">{count} طلب</p>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -250,7 +342,7 @@ export default function AdminOrdersPage() {
                   <span className="font-bold">تاريخ الاستلام</span>
                   <input
                     type="date"
-                    value={order.pickup_date || ""}
+                    value={validDateValue(order.pickup_date)}
                     onChange={(e) =>
                       updateOrder(order.id, "pickup_date", e.target.value)
                     }
@@ -274,7 +366,7 @@ export default function AdminOrdersPage() {
                   <span className="font-bold">وقت التسليم المتوقع</span>
                   <input
                     type="datetime-local"
-                    value={order.expected_delivery_time || ""}
+                    value={validDateTimeValue(order.expected_delivery_time)}
                     onChange={(e) =>
                       updateOrder(
                         order.id,
