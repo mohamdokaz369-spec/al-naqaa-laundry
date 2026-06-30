@@ -58,7 +58,10 @@ export default function AdminOrdersPage() {
   const [selectedDate, setSelectedDate] = useState(todayDate());
   const [searchTerm, setSearchTerm] = useState("");
   const [password, setPassword] = useState("");
-  const [authenticated, setAuthenticated] = useState(false);
+  const [authenticated, setAuthenticated] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("admin-authenticated") === "true";
+  });
 
   async function fetchOrders() {
     const { data, error } = await supabase
@@ -181,6 +184,7 @@ export default function AdminOrdersPage() {
           <button
             onClick={() => {
               if (password === ADMIN_PASSWORD) {
+                localStorage.setItem("admin-authenticated", "true");
                 setAuthenticated(true);
               } else {
                 alert("كلمة السر غير صحيحة");
@@ -198,6 +202,16 @@ export default function AdminOrdersPage() {
   return (
     <div dir="rtl" className="min-h-screen bg-slate-950 p-6 text-white">
       <h1 className="mb-6 text-3xl font-bold">لوحة طلبات مغسلة النقاء</h1>
+
+      <button
+        onClick={() => {
+          localStorage.removeItem("admin-authenticated");
+          setAuthenticated(false);
+        }}
+        className="mb-6 rounded-lg bg-red-600 px-4 py-2 font-bold text-white"
+      >
+        تسجيل خروج
+      </button>
 
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-5">
         <div className="rounded-xl bg-white/10 p-4">
