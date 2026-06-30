@@ -15,6 +15,9 @@ type Order = {
   pickup_time: string | null;
   expected_delivery_time: string | null;
   notes: string | null;
+  location_lat: number | null;
+  location_lng: number | null;
+  google_maps_link: string | null;
   created_at: string;
 };
 
@@ -146,6 +149,7 @@ export default function AdminOrdersPage() {
         order.pickup_time,
         order.expected_delivery_time,
         order.notes,
+        order.google_maps_link,
       ]
         .filter(Boolean)
         .join(" ")
@@ -379,6 +383,23 @@ export default function AdminOrdersPage() {
                     </div>
                   )}
                 </div>
+
+                {/* Google Maps button */}
+                {order.google_maps_link && (
+                  <div className="mb-3">
+                    <a
+                      href={order.google_maps_link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white hover:bg-blue-600"
+                    >
+                      <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
+                      </svg>
+                      فتح الموقع على الخريطة
+                    </a>
+                  </div>
+                )}
 
                 {/* Editable Fields */}
                 <div className="mt-3 grid gap-2 md:grid-cols-2">

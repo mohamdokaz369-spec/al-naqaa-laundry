@@ -34,6 +34,24 @@ const statusColor: Record<string, string> = {
   delivered: "bg-slate-500/20 text-slate-300 border-slate-500/40",
 };
 
+/**
+ * Normalize order number input to canonical NQ-N format.
+ * Accepts: NQ-5, nq-5, nq5, 5, #5
+ */
+function normalizeOrderNumber(input: string): string {
+  const s = input.trim();
+  // Already NQ-N
+  if (/^NQ-\d+$/i.test(s)) return s.toUpperCase();
+  // NQN (no dash)
+  const nqNoDash = s.match(/^nq(\d+)$/i);
+  if (nqNoDash) return `NQ-${nqNoDash[1]}`;
+  // #5 or plain digit(s)
+  const num = s.replace(/^#/, "").match(/^\d+$/);
+  if (num) return `NQ-${num[0]}`;
+  // Fallback: uppercase as-is
+  return s.toUpperCase();
+}
+
 function formatDate(dateStr: string | null) {
   if (!dateStr) return null;
   try {
@@ -64,23 +82,25 @@ function formatDateTime(dtStr: string | null) {
 
 export default function TrackOrderPage() {
   const [orderNumber, setOrderNumber] = useState("");
+  const [phone, setPhone] = useState("");
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
 
+  // Pre-fill order number from query param but do NOT auto-search
+  // (phone is required, so we can't auto-submit without it)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const fromQuery = params.get("order");
-    if (fromQuery) {
-      setOrderNumber(fromQuery);
-      searchByNumber(fromQuery);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (fromQuery) setOrderNumber(fromQuery);
   }, []);
 
-  async function searchByNumber(num: string) {
-    const q = num.trim().toUpperCase();
-    if (!q) return;
+  async function handleSearch() {
+    const normalizedNum = normalizeOrderNumber(orderNumber);
+    const normalizedPhone = phone.trim();
+
+    if (!normalizedNum || !normalizedPhone) return;
+
     setLoading(true);
     setSearched(true);
     setOrder(null);
@@ -88,7 +108,8 @@ export default function TrackOrderPage() {
     const { data, error } = await supabase
       .from("orders")
       .select("*")
-      .eq("order_number", q)
+      .eq("order_number", normalizedNum)
+      .eq("phone", normalizedPhone)
       .single();
 
     if (error && error.code !== "PGRST116") {
@@ -99,35 +120,45 @@ export default function TrackOrderPage() {
     setLoading(false);
   }
 
-  function handleSearch() {
-    searchByNumber(orderNumber);
-  }
+  const canSearch = orderNumber.trim().length > 0 && phone.trim().length > 0;
 
   return (
     <div dir="rtl" className="min-h-screen bg-slate-950 p-6 text-white">
       <div className="mx-auto mt-10 max-w-md">
-        <Link href="/" className="mb-6 inline-flex items-center gap-2 text-sm text-slate-400 hover:text-slate-200">
+        <Link
+          href="/"
+          className="mb-6 inline-flex items-center gap-2 text-sm text-slate-400 hover:text-slate-200"
+        >
           ← العودة للرئيسية
         </Link>
 
         <div className="rounded-2xl bg-white/10 p-6">
           <h1 className="mb-1 text-2xl font-bold">تتبع الطلب</h1>
-          <p className="mb-6 text-sm text-slate-400">أدخل رقم الطلب لمعرفة حالته</p>
+          <p className="mb-6 text-sm text-slate-400">
+            أدخل رقم الطلب ورقم الهاتف لمعرفة حالة طلبك
+          </p>
 
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-3">
             <input
-              className="flex-1 rounded-lg border border-white/20 bg-transparent p-3 uppercase placeholder-slate-500"
-              placeholder="مثال: NQ-12"
+              className="w-full rounded-lg border border-white/20 bg-transparent p-3 placeholder-slate-500 uppercase"
+              placeholder="رقم الطلب — مثال: NQ-12 أو 12"
               value={orderNumber}
               onChange={(e) => setOrderNumber(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+              onKeyDown={(e) => e.key === "Enter" && canSearch && handleSearch()}
+            />
+            <input
+              className="w-full rounded-lg border border-white/20 bg-transparent p-3 placeholder-slate-500"
+              placeholder="رقم الهاتف المسجل في الطلب"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && canSearch && handleSearch()}
             />
             <button
               onClick={handleSearch}
-              disabled={loading || !orderNumber.trim()}
-              className="rounded-lg bg-cyan-600 px-5 font-bold disabled:opacity-50 hover:bg-cyan-500"
+              disabled={loading || !canSearch}
+              className="w-full rounded-lg bg-cyan-600 p-3 font-bold hover:bg-cyan-500 disabled:opacity-50"
             >
-              {loading ? "..." : "بحث"}
+              {loading ? "جاري البحث..." : "تتبع الطلب"}
             </button>
           </div>
 
@@ -138,23 +169,34 @@ export default function TrackOrderPage() {
 
             {searched && !loading && !order && (
               <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-center">
-                <p className="text-2xl mb-2">🔍</p>
-                <p className="text-slate-300">لا يوجد طلب بهذا الرقم</p>
-                <p className="mt-1 text-sm text-slate-500">تأكد من الرقم وحاول مجدداً</p>
+                <p className="mb-2 text-2xl">🔍</p>
+                <p className="text-slate-300">
+                  لم نجد طلباً مطابقاً لرقم الطلب ورقم الهاتف
+                </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  تأكد من الرقمين وحاول مجدداً
+                </p>
               </div>
             )}
 
             {order && (
-              <div className="rounded-xl border border-white/10 bg-slate-900/80 overflow-hidden">
+              <div className="overflow-hidden rounded-xl border border-white/10 bg-slate-900/80">
                 <div className="border-b border-white/10 bg-white/5 px-5 py-4">
-                  <p className="text-xs text-slate-500 mb-1">رقم الطلب</p>
-                  <p className="text-xl font-bold tracking-widest text-cyan-300">{order.order_number}</p>
+                  <p className="mb-1 text-xs text-slate-500">رقم الطلب</p>
+                  <p className="text-xl font-bold tracking-widest text-cyan-300">
+                    {order.order_number}
+                  </p>
                 </div>
 
-                <div className="p-5 space-y-3">
+                <div className="space-y-3 p-5">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-slate-400">الحالة</span>
-                    <span className={`rounded-full border px-3 py-0.5 text-sm font-medium ${statusColor[order.status] ?? "bg-white/10 text-white border-white/20"}`}>
+                    <span
+                      className={`rounded-full border px-3 py-0.5 text-sm font-medium ${
+                        statusColor[order.status] ??
+                        "border-white/20 bg-white/10 text-white"
+                      }`}
+                    >
                       {statusArabic[order.status] ?? order.status}
                     </span>
                   </div>
@@ -182,10 +224,11 @@ export default function TrackOrderPage() {
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-slate-400">وقت التسليم المتوقع</span>
                     <span className="text-sm">
-                      {order.expected_delivery_time
-                        ? formatDateTime(order.expected_delivery_time)
-                        : <span className="text-slate-500">لم يتم تحديده بعد</span>
-                      }
+                      {order.expected_delivery_time ? (
+                        formatDateTime(order.expected_delivery_time)
+                      ) : (
+                        <span className="text-slate-500">لم يتم تحديده بعد</span>
+                      )}
                     </span>
                   </div>
                 </div>
