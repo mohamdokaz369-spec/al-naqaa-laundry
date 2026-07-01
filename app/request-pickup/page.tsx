@@ -11,6 +11,7 @@ const SERVICE_OPTIONS = [
   { value: "غسيل + كي", label: "غسيل + كي" },
   { value: "تنظيف جاف", label: "تنظيف جاف" },
   { value: "سجاد", label: "سجاد" },
+  { value: "سجاد آلي", label: "غسيل السجاد بماكينة Full Automatic" },
   { value: "كنب", label: "كنب" },
   { value: "بطانيات", label: "بطانيات" },
 ];
