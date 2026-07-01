@@ -6,6 +6,7 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { STATUS_LABELS, STATUS_BADGE } from "@/lib/types";
 import type { Order, OrderStatus } from "@/lib/types";
+import { businessWhatsAppUrl } from "@/lib/whatsapp";
 
 function normalizeOrderNumber(input: string): string {
   const s = decodeURIComponent(input).trim();
@@ -249,13 +250,25 @@ export default function TrackPage() {
           </div>
         </div>
 
-        <div className="mt-4 text-center">
+        <div className="mt-4 flex flex-col items-center gap-3">
           <button
             onClick={refreshOrder}
             className="rounded-lg border border-white/20 px-4 py-2 text-sm text-slate-400 hover:bg-white/10"
           >
             تحديث الآن
           </button>
+          <a
+            href={businessWhatsAppUrl(`مرحبا، أريد الاستفسار عن طلبي رقم ${order.order_number}.`)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-lg bg-[#25D366] px-4 py-2 text-sm font-bold text-white hover:bg-green-500"
+          >
+            <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
+              <path d="M12 0C5.373 0 0 5.373 0 12c0 2.125.553 4.122 1.523 5.854L.057 23.882l6.187-1.621A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.892a9.877 9.877 0 01-5.031-1.376l-.361-.214-3.735.979 1.005-3.645-.235-.374A9.861 9.861 0 012.108 12C2.108 6.527 6.527 2.108 12 2.108c5.473 0 9.892 4.419 9.892 9.892 0 5.473-4.419 9.892-9.892 9.892z" />
+            </svg>
+            تواصل مع المغسلة عبر واتساب
+          </a>
         </div>
       </div>
     </div>

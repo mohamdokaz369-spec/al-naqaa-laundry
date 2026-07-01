@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { STATUS_LABELS, STATUS_BADGE } from "@/lib/types";
+import type { OrderStatus } from "@/lib/types";
 
 type Order = {
   id: number;
@@ -16,22 +18,6 @@ type Order = {
   pickup_time: string | null;
   expected_delivery_time: string | null;
   created_at: string;
-};
-
-const statusArabic: Record<string, string> = {
-  pending: "بانتظار الاستلام",
-  picked_up: "تم الاستلام",
-  washing: "قيد الغسيل",
-  ready: "جاهز للتسليم",
-  delivered: "تم التسليم",
-};
-
-const statusColor: Record<string, string> = {
-  pending: "bg-yellow-500/20 text-yellow-300 border-yellow-500/40",
-  picked_up: "bg-blue-500/20 text-blue-300 border-blue-500/40",
-  washing: "bg-purple-500/20 text-purple-300 border-purple-500/40",
-  ready: "bg-green-500/20 text-green-300 border-green-500/40",
-  delivered: "bg-slate-500/20 text-slate-300 border-slate-500/40",
 };
 
 /**
@@ -86,6 +72,7 @@ export default function TrackOrderPage() {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [searchError, setSearchError] = useState("");
 
   // Pre-fill order number from query param but do NOT auto-search
   // (phone is required, so we can't auto-submit without it)
@@ -103,6 +90,7 @@ export default function TrackOrderPage() {
 
     setLoading(true);
     setSearched(true);
+    setSearchError("");
     setOrder(null);
 
     const { data, error } = await supabase
@@ -113,7 +101,7 @@ export default function TrackOrderPage() {
       .single();
 
     if (error && error.code !== "PGRST116") {
-      alert("صار خطأ: " + error.message);
+      setSearchError("حدث خطأ أثناء البحث، حاول مرة أخرى");
     }
 
     setOrder(data ?? null);
@@ -167,7 +155,13 @@ export default function TrackOrderPage() {
               <div className="py-8 text-center text-slate-400">جاري البحث...</div>
             )}
 
-            {searched && !loading && !order && (
+            {searchError && !loading && (
+              <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-center">
+                <p className="text-sm text-red-400">{searchError}</p>
+              </div>
+            )}
+
+            {searched && !loading && !order && !searchError && (
               <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-center">
                 <p className="mb-2 text-2xl">🔍</p>
                 <p className="text-slate-300">
@@ -193,11 +187,11 @@ export default function TrackOrderPage() {
                     <span className="text-sm text-slate-400">الحالة</span>
                     <span
                       className={`rounded-full border px-3 py-0.5 text-sm font-medium ${
-                        statusColor[order.status] ??
+                        STATUS_BADGE[order.status as OrderStatus] ??
                         "border-white/20 bg-white/10 text-white"
                       }`}
                     >
-                      {statusArabic[order.status] ?? order.status}
+                      {STATUS_LABELS[order.status as OrderStatus] ?? order.status}
                     </span>
                   </div>
 

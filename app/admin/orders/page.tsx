@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { ORDER_STATUSES, STATUS_LABELS, STATUS_BADGE, SERVICE_LABELS } from "@/lib/types";
 import type { Order, Driver, OrderStatus } from "@/lib/types";
+import { whatsappUrl } from "@/lib/whatsapp";
+import { ToastBanner } from "@/components/Toast";
+import type { ToastState } from "@/components/Toast";
 
 type EditForm = {
   customer_name: string;
@@ -24,15 +27,11 @@ type EditForm = {
   scheduled_at: string;
 };
 
-const ADMIN_PASSWORD = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || "AlNaqaaAdmin2026";
+const ADMIN_PASSWORD = process.env.NEXT_PUBLIC_ADMIN_PASSWORD ?? "";
 
 const DONE_STATUSES = new Set<string>([
   "picked_up", "washing", "ready", "delivering", "completed", "delivered",
 ]);
-
-function israelWhatsapp(phone: string) {
-  return phone.replace(/^0/, "972").replace(/\D/g, "");
-}
 
 function todayDate() {
   return new Date().toISOString().split("T")[0];
@@ -71,7 +70,10 @@ export default function AdminOrdersPage() {
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [editForm, setEditForm] = useState<EditForm | null>(null);
   const [editSaving, setEditSaving] = useState(false);
+  const [toast, setToast] = useState<ToastState | null>(null);
+  const dismissToast = useCallback(() => setToast(null), []);
   const [password, setPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
   const [authenticated, setAuthenticated] = useState(() => {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("admin-authenticated") === "true";
@@ -83,7 +85,7 @@ export default function AdminOrdersPage() {
       .select("*")
       .order("created_at", { ascending: false });
     if (error) {
-      alert("صار خطأ بتحميل الطلبات: " + error.message);
+      setToast({ type: "error", message: "حدث خطأ أثناء تحميل الطلبات" });
       setLoading(false);
       return;
     }
@@ -102,7 +104,7 @@ export default function AdminOrdersPage() {
 
   async function updateOrder(id: number, updates: Record<string, string | number | null>) {
     const { error } = await supabase.from("orders").update(updates).eq("id", id);
-    if (error) { alert("صار خطأ: " + error.message); return; }
+    if (error) { setToast({ type: "error", message: "حدث خطأ أثناء التحديث" }); return; }
     fetchOrders();
   }
 
@@ -181,7 +183,7 @@ export default function AdminOrdersPage() {
     };
     const { error } = await supabase.from("orders").update(payload).eq("id", editingOrder.id);
     if (error) {
-      alert("صار خطأ: " + error.message);
+      setToast({ type: "error", message: "حدث خطأ أثناء الحفظ" });
       setEditSaving(false);
       return;
     }
@@ -189,6 +191,7 @@ export default function AdminOrdersPage() {
     setEditingOrder(null);
     setEditForm(null);
     setEditSaving(false);
+    setToast({ type: "success", message: "تم حفظ التعديلات بنجاح" });
     fetchOrders();
   }
 
@@ -196,7 +199,8 @@ export default function AdminOrdersPage() {
     const label = order.order_number || `NQ-${order.id}`;
     if (!confirm(`هل أنت متأكد من حذف الطلب ${label}؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
     const { error } = await supabase.from("orders").delete().eq("id", order.id);
-    if (error) { alert("صار خطأ بالحذف: " + error.message); return; }
+    if (error) { setToast({ type: "error", message: "حدث خطأ أثناء الحذف" }); return; }
+    setToast({ type: "success", message: `تم حذف الطلب ${label} بنجاح` });
     fetchOrders();
   }
 
@@ -316,6 +320,33 @@ export default function AdminOrdersPage() {
   }
 
   if (!authenticated) {
+    if (!ADMIN_PASSWORD) {
+      return (
+        <div dir="rtl" className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-white">
+          <div className="w-full max-w-sm rounded-2xl border border-red-500/30 bg-red-950/40 p-6 text-center">
+            <p className="mb-2 text-3xl">⚠️</p>
+            <h1 className="mb-2 text-lg font-bold text-red-300">خطأ في الإعدادات</h1>
+            <p className="text-sm text-slate-400">
+              لم يتم تعيين متغير البيئة{" "}
+              <code className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-xs text-red-300">
+                NEXT_PUBLIC_ADMIN_PASSWORD
+              </code>
+              . يرجى إضافته في إعدادات Vercel وإعادة النشر.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    function tryLogin() {
+      if (password === ADMIN_PASSWORD) {
+        localStorage.setItem("admin-authenticated", "true");
+        setAuthenticated(true);
+      } else {
+        setLoginError("كلمة السر غير صحيحة");
+      }
+    }
+
     return (
       <div dir="rtl" className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-white">
         <div className="w-full max-w-sm rounded-2xl bg-white/10 p-6">
@@ -325,25 +356,18 @@ export default function AdminOrdersPage() {
             type="password"
             placeholder="كلمة السر"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                if (password === ADMIN_PASSWORD) {
-                  localStorage.setItem("admin-authenticated", "true");
-                  setAuthenticated(true);
-                } else alert("كلمة السر غير صحيحة");
-              }
-            }}
-            className="mb-4 w-full rounded-lg bg-slate-800 p-3 text-white outline-none"
+            onChange={(e) => { setPassword(e.target.value); setLoginError(""); }}
+            onKeyDown={(e) => { if (e.key === "Enter") tryLogin(); }}
+            className={`mb-2 w-full rounded-lg bg-slate-800 p-3 text-white outline-none ${loginError ? "ring-1 ring-red-500" : ""}`}
           />
+          {loginError && (
+            <p className="mb-3 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400 border border-red-500/20">
+              {loginError}
+            </p>
+          )}
           <button
-            onClick={() => {
-              if (password === ADMIN_PASSWORD) {
-                localStorage.setItem("admin-authenticated", "true");
-                setAuthenticated(true);
-              } else alert("كلمة السر غير صحيحة");
-            }}
-            className="w-full rounded-lg bg-cyan-600 p-3 font-bold hover:bg-cyan-500"
+            onClick={tryLogin}
+            className="w-full rounded-lg bg-cyan-600 p-3 font-bold hover:bg-cyan-500 mt-1"
           >
             دخول
           </button>
@@ -354,6 +378,7 @@ export default function AdminOrdersPage() {
 
   return (
     <div dir="rtl" className="min-h-screen bg-slate-950 p-4 text-white md:p-6">
+      <ToastBanner toast={toast} onDismiss={dismissToast} />
       {/* Header */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -889,9 +914,15 @@ export default function AdminOrdersPage() {
 
           {/* Orders list */}
           {loading ? (
-            <p className="text-slate-400">جاري تحميل الطلبات...</p>
+            <div className="rounded-xl bg-white/5 p-10 text-center">
+              <p className="text-slate-400">جاري تحميل الطلبات...</p>
+            </div>
           ) : filteredOrders.length === 0 ? (
-            <p className="text-slate-400">لا توجد طلبات مطابقة.</p>
+            <div className="rounded-xl bg-white/5 p-10 text-center">
+              <p className="mb-1 text-2xl">📋</p>
+              <p className="text-slate-300">لا توجد طلبات مطابقة</p>
+              <p className="mt-1 text-sm text-slate-500">جرب تغيير الفلتر أو التاريخ</p>
+            </div>
           ) : (
             <div className="space-y-4">
               {filteredOrders.map((order) => {
@@ -996,7 +1027,7 @@ export default function AdminOrdersPage() {
                       )}
 
                       {/* Editable Fields */}
-                      <div className="mt-3 grid gap-2 md:grid-cols-3">
+                      <div className="mt-3 grid gap-2 grid-cols-1 sm:grid-cols-2 md:grid-cols-3">
                         <label className="flex flex-col gap-1">
                           <span className="text-xs text-slate-400">الحالة</span>
                           <select
@@ -1099,24 +1130,40 @@ export default function AdminOrdersPage() {
                         </label>
                       </div>
 
-                      {/* WhatsApp */}
-                      <div className="mt-3">
+                      {/* Contact buttons */}
+                      <div className="mt-3 flex flex-wrap gap-2">
                         <a
-                          href={`https://wa.me/${israelWhatsapp(order.phone)}?text=${encodeURIComponent(
-                            `مرحباً ${order.customer_name}، بخصوص طلبك رقم ${
-                              order.order_number || `NQ-${order.id}`
-                            } من مغسلة النقاء.`
-                          )}`}
+                          href={`tel:${order.phone}`}
+                          className="inline-flex items-center gap-2 rounded-lg bg-slate-700 px-3 py-2 text-sm font-bold text-white hover:bg-slate-600"
+                        >
+                          📞 اتصال
+                        </a>
+                        <a
+                          href={whatsappUrl(order.phone, `مرحبا، معك مغسلة النقاء بخصوص طلبك رقم ${order.order_number || `NQ-${order.id}`}.`)}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 rounded-lg bg-green-700 px-4 py-2 text-sm font-bold text-white hover:bg-green-600"
+                          className="inline-flex items-center gap-2 rounded-lg bg-green-700 px-3 py-2 text-sm font-bold text-white hover:bg-green-600"
                         >
                           <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
                             <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
                             <path d="M12 0C5.373 0 0 5.373 0 12c0 2.125.553 4.122 1.523 5.854L.057 23.882l6.187-1.621A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.892a9.877 9.877 0 01-5.031-1.376l-.361-.214-3.735.979 1.005-3.645-.235-.374A9.861 9.861 0 012.108 12C2.108 6.527 6.527 2.108 12 2.108c5.473 0 9.892 4.419 9.892 9.892 0 5.473-4.419 9.892-9.892 9.892z" />
                           </svg>
-                          واتساب
+                          واتساب العميل
                         </a>
+                        {order.assigned_driver_id && (() => {
+                          const assignedDriver = drivers.find((d) => d.id === order.assigned_driver_id);
+                          return assignedDriver ? (
+                            <a
+                              key="driver-wa"
+                              href={whatsappUrl(assignedDriver.phone, `سائق — ${order.order_number || `NQ-${order.id}`}: ${order.customer_name} — ${order.address || ""}`)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-2 rounded-lg bg-purple-700 px-3 py-2 text-sm font-bold text-white hover:bg-purple-600"
+                            >
+                              🚗 واتساب السائق
+                            </a>
+                          ) : null;
+                        })()}
                       </div>
                     </div>
                   </div>

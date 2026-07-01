@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { DRIVER_STATUS_ACTIONS, STATUS_LABELS, STATUS_BADGE } from "@/lib/types";
 import type { Order, Driver, OrderStatus } from "@/lib/types";
 import { optimizeRoute } from "@/lib/route-optimizer";
+import { whatsappUrl } from "@/lib/whatsapp";
 
 type DriverSession = {
   driverId: number;
@@ -33,10 +34,6 @@ const DONE_STATUSES = new Set<string>([
   "completed",
   "delivered",
 ]);
-
-function israelWhatsapp(phone: string): string {
-  return phone.replace(/^0/, "972").replace(/\D/g, "");
-}
 
 function loadSession(): DriverSession | null {
   try {
@@ -398,7 +395,7 @@ export default function DriverPage() {
                     📞 اتصال
                   </a>
                   <a
-                    href={`https://wa.me/${israelWhatsapp(order.phone)}`}
+                    href={whatsappUrl(order.phone, `مرحبا، أنا سائق مغسلة النقاء. أنا في الطريق لاستلام طلبك رقم ${order.order_number || `NQ-${order.id}`}.`)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-green-700 py-3 text-sm font-bold hover:bg-green-600 active:scale-95"

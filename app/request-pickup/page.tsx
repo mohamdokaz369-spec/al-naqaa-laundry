@@ -1,9 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { businessStatusMessage } from "@/lib/business-hours";
+import { businessWhatsAppUrl } from "@/lib/whatsapp";
+import { ToastBanner } from "@/components/Toast";
+import type { ToastState } from "@/components/Toast";
+
+type LastOrderDetails = {
+  customerName: string;
+  phone: string;
+  address: string;
+  serviceType: string;
+  pickupDate: string;
+  pickupTime: string;
+  googleMapsLink: string;
+};
 
 const SERVICE_OPTIONS = [
   { value: "غسيل", label: "غسيل" },
@@ -48,8 +61,11 @@ export default function RequestPickupPage() {
 
   const [lastOrderNumber, setLastOrderNumber] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [lastOrderDetails, setLastOrderDetails] = useState<LastOrderDetails | null>(null);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
+  const [toast, setToast] = useState<ToastState | null>(null);
+  const dismissToast = useCallback(() => setToast(null), []);
 
   function hasLocation(): boolean {
     return (
@@ -137,7 +153,7 @@ export default function RequestPickupPage() {
 
     if (error) {
       setLoading(false);
-      alert("صار خطأ: " + error.message);
+      setToast({ type: "error", message: "حدث خطأ أثناء إرسال الطلب، حاول مرة أخرى" });
       return;
     }
 
@@ -151,10 +167,19 @@ export default function RequestPickupPage() {
     setLoading(false);
 
     if (updateError) {
-      alert("تم إنشاء الطلب لكن صار خطأ برقم الطلب: " + updateError.message);
+      setToast({ type: "warning", message: "تم إنشاء الطلب لكن حدث خطأ في تعيين رقم الطلب" });
       return;
     }
 
+    setLastOrderDetails({
+      customerName: customerName.trim(),
+      phone: phone.trim(),
+      address: address.trim(),
+      serviceType,
+      pickupDate,
+      pickupTime,
+      googleMapsLink: effectiveMapsLink || "",
+    });
     setLastOrderNumber(orderNumber);
     setSuccessMessage(businessStatusMessage());
 
@@ -176,6 +201,7 @@ export default function RequestPickupPage() {
   if (lastOrderNumber) {
     return (
       <div dir="rtl" className="min-h-screen bg-slate-950 text-white p-6">
+        <ToastBanner toast={toast} onDismiss={dismissToast} />
         <div className="mx-auto mt-20 max-w-md rounded-2xl bg-white/10 p-8 text-center">
           <div className="mb-4 text-5xl">✅</div>
           <h2 className="mb-2 text-2xl font-bold text-green-400">تم إرسال طلبك!</h2>
@@ -193,6 +219,22 @@ export default function RequestPickupPage() {
             >
               تتبع طلبي الآن
             </Link>
+            {lastOrderDetails && (
+              <a
+                href={businessWhatsAppUrl(
+                  `مرحبا مغسلة النقاء، تم إنشاء طلب جديد:\nرقم الطلب: ${lastOrderNumber}\nالاسم: ${lastOrderDetails.customerName}\nالهاتف: ${lastOrderDetails.phone}\nالعنوان: ${lastOrderDetails.address || "—"}\nالخدمة: ${lastOrderDetails.serviceType}\nالموعد: ${lastOrderDetails.pickupDate} الساعة ${lastOrderDetails.pickupTime}${lastOrderDetails.googleMapsLink ? `\nرابط الموقع: ${lastOrderDetails.googleMapsLink}` : ""}`
+                )}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-[#25D366] px-6 py-3 font-bold text-white hover:bg-[#20bd5a]"
+              >
+                <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
+                  <path d="M12 0C5.373 0 0 5.373 0 12c0 2.125.553 4.122 1.523 5.854L.057 23.882l6.187-1.621A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.892a9.877 9.877 0 01-5.031-1.376l-.361-.214-3.735.979 1.005-3.645-.235-.374A9.861 9.861 0 012.108 12C2.108 6.527 6.527 2.108 12 2.108c5.473 0 9.892 4.419 9.892 9.892 0 5.473-4.419 9.892-9.892 9.892z" />
+                </svg>
+                إرسال الطلب عبر واتساب
+              </a>
+            )}
             <button
               onClick={() => setLastOrderNumber("")}
               className="rounded-full border border-white/20 px-6 py-3 font-bold hover:bg-white/10"
@@ -210,6 +252,7 @@ export default function RequestPickupPage() {
 
   return (
     <div dir="rtl" className="min-h-screen bg-slate-950 text-white p-6">
+      <ToastBanner toast={toast} onDismiss={dismissToast} />
       <div className="mx-auto mt-10 max-w-md">
         <Link
           href="/"

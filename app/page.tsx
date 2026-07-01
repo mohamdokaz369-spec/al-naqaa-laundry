@@ -1,4 +1,14 @@
 import Link from "next/link";
+import { businessWhatsAppUrl } from "@/lib/whatsapp";
+
+function WhatsAppIcon({ className = "h-5 w-5" }: { className?: string }) {
+  return (
+    <svg className={className} fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
+      <path d="M12 0C5.373 0 0 5.373 0 12c0 2.125.553 4.122 1.523 5.854L.057 23.882l6.187-1.621A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.892a9.877 9.877 0 01-5.031-1.376l-.361-.214-3.735.979 1.005-3.645-.235-.374A9.861 9.861 0 012.108 12C2.108 6.527 6.527 2.108 12 2.108c5.473 0 9.892 4.419 9.892 9.892 0 5.473-4.419 9.892-9.892 9.892z" />
+    </svg>
+  );
+}
 
 export default function HomePage() {
   return (
@@ -375,6 +385,34 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ─── WHATSAPP CTA ─────────────────────────────────────────────────────── */}
+      <section className="bg-[#070d1a] py-20">
+        <div className="mx-auto max-w-4xl px-6">
+          <div className="overflow-hidden rounded-3xl border border-[#25D366]/20 bg-[#25D366]/5 p-10 text-center">
+            <div className="mb-5 flex justify-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#25D366]/20">
+                <WhatsAppIcon className="h-8 w-8 text-[#25D366]" />
+              </div>
+            </div>
+            <h2 className="mb-4 text-2xl font-extrabold md:text-3xl">
+              تحتاج مساعدة أو عندك سؤال؟
+            </h2>
+            <p className="mx-auto mb-8 max-w-lg text-slate-400">
+              تواصل معنا مباشرة عبر واتساب وسنساعدك في اختيار الخدمة المناسبة أو متابعة طلبك.
+            </p>
+            <a
+              href={businessWhatsAppUrl("مرحبا، أريد الاستفسار عن خدمات مغسلة النقاء.")}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-3 rounded-full bg-[#25D366] px-8 py-4 text-lg font-bold text-white shadow-[0_0_30px_rgba(37,211,102,0.2)] transition-all hover:bg-[#20bd5a] hover:shadow-[0_0_45px_rgba(37,211,102,0.35)]"
+            >
+              <WhatsAppIcon />
+              راسلنا على واتساب
+            </a>
+          </div>
+        </div>
+      </section>
+
       {/* ─── STATS ────────────────────────────────────────────────────────────── */}
       <section className="bg-[#070d1a] py-20">
         <div className="mx-auto max-w-7xl px-6">
@@ -450,6 +488,18 @@ export default function HomePage() {
           </div>
         </div>
       </footer>
+
+      {/* ─── FLOATING WHATSAPP BUTTON ──────────────────────────────────────────── */}
+      <a
+        href={businessWhatsAppUrl("مرحبا، أريد الاستفسار عن خدمات مغسلة النقاء.")}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="تواصل واتساب"
+        className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 rounded-full bg-[#25D366] px-5 py-3 text-sm font-bold text-white shadow-[0_4px_20px_rgba(37,211,102,0.4)] transition-all hover:bg-[#20bd5a] hover:shadow-[0_4px_28px_rgba(37,211,102,0.6)] active:scale-95 md:px-6 md:py-3.5 md:text-base"
+      >
+        <WhatsAppIcon className="h-5 w-5 md:h-6 md:w-6" />
+        <span>تواصل واتساب</span>
+      </a>
 
     </div>
   );
