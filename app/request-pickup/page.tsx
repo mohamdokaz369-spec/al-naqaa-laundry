@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { businessStatusMessage } from "@/lib/business-hours";
 
 const SERVICE_OPTIONS = [
   { value: "غسيل", label: "غسيل" },
@@ -23,6 +24,12 @@ type FormErrors = {
   pickupTime?: string;
 };
 
+function validatePhone(p: string): boolean {
+  const cleaned = p.replace(/\s/g, "");
+  // Israeli mobile: 05X, +9725X, 9725X — 10-13 digits
+  return /^(\+972|972|0)[5]\d{7,8}$/.test(cleaned) || /^\d{9,12}$/.test(cleaned);
+}
+
 export default function RequestPickupPage() {
   const [customerName, setCustomerName] = useState("");
   const [phone, setPhone] = useState("");
@@ -32,7 +39,6 @@ export default function RequestPickupPage() {
   const [pickupTime, setPickupTime] = useState("");
   const [notes, setNotes] = useState("");
 
-  // Location state
   const [locationLat, setLocationLat] = useState<number | null>(null);
   const [locationLng, setLocationLng] = useState<number | null>(null);
   const [googleMapsLink, setGoogleMapsLink] = useState("");
@@ -40,6 +46,7 @@ export default function RequestPickupPage() {
   const [locationLoading, setLocationLoading] = useState(false);
 
   const [lastOrderNumber, setLastOrderNumber] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
 
@@ -54,7 +61,11 @@ export default function RequestPickupPage() {
   function validate(): boolean {
     const newErrors: FormErrors = {};
     if (!customerName.trim()) newErrors.customerName = "الاسم مطلوب";
-    if (!phone.trim()) newErrors.phone = "رقم الهاتف مطلوب";
+    if (!phone.trim()) {
+      newErrors.phone = "رقم الهاتف مطلوب";
+    } else if (!validatePhone(phone)) {
+      newErrors.phone = "رقم الهاتف غير صحيح";
+    }
     if (!hasLocation()) newErrors.location = "يجب إدخال العنوان أو تحديد الموقع";
     if (!serviceType) newErrors.serviceType = "نوع الخدمة مطلوب";
     if (!pickupDate) newErrors.pickupDate = "تاريخ الاستلام مطلوب";
@@ -97,7 +108,6 @@ export default function RequestPickupPage() {
     setLoading(true);
     setLastOrderNumber("");
 
-    // Build the effective maps link
     const effectiveMapsLink =
       googleMapsLink.trim() ||
       (locationLat !== null && locationLng !== null
@@ -108,8 +118,8 @@ export default function RequestPickupPage() {
       .from("orders")
       .insert([
         {
-          customer_name: customerName,
-          phone,
+          customer_name: customerName.trim(),
+          phone: phone.trim(),
           address: address.trim() || null,
           service_type: serviceType,
           pickup_date: pickupDate,
@@ -145,6 +155,9 @@ export default function RequestPickupPage() {
     }
 
     setLastOrderNumber(orderNumber);
+    setSuccessMessage(businessStatusMessage());
+
+    // Reset form
     setCustomerName("");
     setPhone("");
     setAddress("");
@@ -165,7 +178,7 @@ export default function RequestPickupPage() {
         <div className="mx-auto mt-20 max-w-md rounded-2xl bg-white/10 p-8 text-center">
           <div className="mb-4 text-5xl">✅</div>
           <h2 className="mb-2 text-2xl font-bold text-green-400">تم إرسال طلبك!</h2>
-          <p className="mb-6 text-slate-300">احتفظ برقم الطلب لتتبع حالته</p>
+          <p className="mb-4 text-sm text-slate-300">{successMessage}</p>
 
           <div className="mb-6 rounded-xl border-2 border-cyan-500 bg-cyan-500/10 p-6">
             <p className="mb-1 text-sm text-slate-400">رقم طلبك</p>
@@ -174,7 +187,7 @@ export default function RequestPickupPage() {
 
           <div className="flex flex-col gap-3">
             <Link
-              href={`/track-order?order=${lastOrderNumber}`}
+              href={`/track/${lastOrderNumber}`}
               className="rounded-full bg-cyan-600 px-6 py-3 font-bold text-white hover:bg-cyan-500"
             >
               تتبع طلبي الآن
@@ -233,7 +246,7 @@ export default function RequestPickupPage() {
                 className={`w-full rounded-lg border p-3 bg-transparent text-white placeholder-slate-500 ${
                   errors.phone ? "border-red-500" : "border-white/20"
                 }`}
-                placeholder="رقم الهاتف *"
+                placeholder="رقم الهاتف * — مثال: 0501234567"
                 value={phone}
                 onChange={(e) => {
                   setPhone(e.target.value);
@@ -248,10 +261,10 @@ export default function RequestPickupPage() {
             {/* Address + Location */}
             <div className={`rounded-xl border p-4 ${errors.location ? "border-red-500" : "border-white/10"}`}>
               <p className="mb-3 text-sm font-medium text-slate-300">
-                الموقع * <span className="text-slate-500 text-xs">(العنوان أو الموقع الجغرافي)</span>
+                الموقع *{" "}
+                <span className="text-slate-500 text-xs">(العنوان أو الموقع الجغرافي)</span>
               </p>
 
-              {/* Text address */}
               <input
                 className="w-full rounded-lg border border-white/20 bg-transparent p-3 text-white placeholder-slate-500 mb-3"
                 placeholder="العنوان النصي (مثل: شارع الزهور، عرابة)"
@@ -262,7 +275,6 @@ export default function RequestPickupPage() {
                 }}
               />
 
-              {/* Geolocation button */}
               <button
                 type="button"
                 onClick={handleGetLocation}
@@ -283,7 +295,6 @@ export default function RequestPickupPage() {
                 </p>
               )}
 
-              {/* Manual Google Maps link */}
               <input
                 className="w-full rounded-lg border border-white/20 bg-transparent p-3 text-sm text-white placeholder-slate-500"
                 placeholder="أو الصق رابط Google Maps هنا"
@@ -327,9 +338,7 @@ export default function RequestPickupPage() {
             {/* Pickup date / time */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1 block text-xs text-slate-400">
-                  تاريخ الاستلام *
-                </label>
+                <label className="mb-1 block text-xs text-slate-400">تاريخ الاستلام *</label>
                 <input
                   type="date"
                   className={`w-full rounded-lg border p-3 bg-transparent text-white ${
@@ -347,9 +356,7 @@ export default function RequestPickupPage() {
               </div>
 
               <div>
-                <label className="mb-1 block text-xs text-slate-400">
-                  وقت الاستلام *
-                </label>
+                <label className="mb-1 block text-xs text-slate-400">وقت الاستلام *</label>
                 <input
                   type="time"
                   className={`w-full rounded-lg border p-3 bg-transparent text-white ${
