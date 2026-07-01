@@ -70,6 +70,19 @@ export default function AdminOrdersPage() {
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [editForm, setEditForm] = useState<EditForm | null>(null);
   const [editSaving, setEditSaving] = useState(false);
+
+  // Walk-in form
+  const [showWalkIn, setShowWalkIn] = useState(false);
+  const [walkInSaving, setWalkInSaving] = useState(false);
+  const [walkInForm, setWalkInForm] = useState({
+    customer_name: "",
+    phone: "",
+    service_type: "",
+    items_count: "1",
+    expected_delivery_time: "",
+    notes: "",
+  });
+  const [walkInErrors, setWalkInErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<ToastState | null>(null);
   const dismissToast = useCallback(() => setToast(null), []);
   const [password, setPassword] = useState("");
@@ -201,6 +214,61 @@ export default function AdminOrdersPage() {
     const { error } = await supabase.from("orders").delete().eq("id", order.id);
     if (error) { setToast({ type: "error", message: "حدث خطأ أثناء الحذف" }); return; }
     setToast({ type: "success", message: `تم حذف الطلب ${label} بنجاح` });
+    fetchOrders();
+  }
+
+  async function saveWalkIn() {
+    const errs: Record<string, string> = {};
+    if (!walkInForm.customer_name.trim()) errs.customer_name = "الاسم مطلوب";
+    if (!walkInForm.phone.trim()) errs.phone = "الهاتف مطلوب";
+    if (!walkInForm.service_type) errs.service_type = "نوع الخدمة مطلوب";
+    const cnt = parseInt(walkInForm.items_count, 10);
+    if (!walkInForm.items_count || isNaN(cnt) || cnt < 1) errs.items_count = "عدد القطع يجب أن يكون 1 على الأقل";
+    setWalkInErrors(errs);
+    if (Object.keys(errs).length > 0) return;
+
+    setWalkInSaving(true);
+    const now = new Date();
+    const { data, error } = await supabase
+      .from("orders")
+      .insert([{
+        customer_name: walkInForm.customer_name.trim(),
+        phone: walkInForm.phone.trim(),
+        service_type: walkInForm.service_type,
+        items_count: cnt,
+        notes: walkInForm.notes.trim() || null,
+        expected_delivery_time: walkInForm.expected_delivery_time || null,
+        status: "washing",
+        fulfillment_type: "walk_in",
+        order_source: "walk_in",
+        pickup_date: now.toISOString().split("T")[0],
+        pickup_time: now.toTimeString().slice(0, 5),
+        updated_at: now.toISOString(),
+        address: null,
+        location_lat: null,
+        location_lng: null,
+        google_maps_link: null,
+        assigned_driver_id: null,
+        route_order: null,
+      }])
+      .select("id")
+      .single();
+
+    if (error) {
+      setToast({ type: "error", message: "حدث خطأ أثناء إنشاء الطلب" });
+      setWalkInSaving(false);
+      return;
+    }
+
+    const orderNumber = `NQ-${data.id}`;
+    await supabase.from("orders").update({ order_number: orderNumber }).eq("id", data.id);
+    await logStatusHistory(data.id, "washing");
+
+    setToast({ type: "success", message: `تم إنشاء الطلب ${orderNumber} بنجاح` });
+    setShowWalkIn(false);
+    setWalkInForm({ customer_name: "", phone: "", service_type: "", items_count: "1", expected_delivery_time: "", notes: "" });
+    setWalkInErrors({});
+    setWalkInSaving(false);
     fetchOrders();
   }
 
@@ -409,6 +477,12 @@ export default function AdminOrdersPage() {
               📋 البرنامج اليومي
             </button>
           </div>
+          <button
+            onClick={() => setShowWalkIn(true)}
+            className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-bold hover:bg-emerald-600"
+          >
+            🏪 + إضافة طلب داخل المحل
+          </button>
           <Link
             href="/admin/drivers"
             className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-bold hover:bg-slate-600"
@@ -683,6 +757,116 @@ export default function AdminOrdersPage() {
         </div>
       )}
 
+      {/* ─── WALK-IN MODAL ────────────────────────────────────────────────────── */}
+      {showWalkIn && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 pt-8">
+          <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-slate-900 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
+              <div>
+                <h2 className="text-lg font-bold">🏪 طلب داخل المحل</h2>
+                <p className="text-xs text-slate-400">يُحفظ بحالة "قيد الغسيل" مباشرةً</p>
+              </div>
+              <button
+                onClick={() => { setShowWalkIn(false); setWalkInErrors({}); }}
+                className="rounded-lg bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
+              >
+                إلغاء ✕
+              </button>
+            </div>
+
+            <div className="grid gap-4 p-6 sm:grid-cols-2">
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-slate-400">اسم العميل *</span>
+                <input
+                  value={walkInForm.customer_name}
+                  onChange={(e) => { setWalkInForm(f => ({ ...f, customer_name: e.target.value })); setWalkInErrors(e2 => ({ ...e2, customer_name: "" })); }}
+                  className={`rounded-lg bg-slate-800 p-2.5 text-sm text-white outline-none ${walkInErrors.customer_name ? "ring-1 ring-red-500" : ""}`}
+                  placeholder="الاسم الكامل"
+                />
+                {walkInErrors.customer_name && <span className="text-xs text-red-400">{walkInErrors.customer_name}</span>}
+              </label>
+
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-slate-400">الهاتف *</span>
+                <input
+                  value={walkInForm.phone}
+                  onChange={(e) => { setWalkInForm(f => ({ ...f, phone: e.target.value })); setWalkInErrors(e2 => ({ ...e2, phone: "" })); }}
+                  className={`rounded-lg bg-slate-800 p-2.5 text-sm text-white outline-none ${walkInErrors.phone ? "ring-1 ring-red-500" : ""}`}
+                  placeholder="05XXXXXXXX"
+                  dir="ltr"
+                />
+                {walkInErrors.phone && <span className="text-xs text-red-400">{walkInErrors.phone}</span>}
+              </label>
+
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-slate-400">نوع الخدمة *</span>
+                <select
+                  value={walkInForm.service_type}
+                  onChange={(e) => { setWalkInForm(f => ({ ...f, service_type: e.target.value })); setWalkInErrors(e2 => ({ ...e2, service_type: "" })); }}
+                  className={`rounded-lg bg-slate-800 p-2.5 text-sm text-white outline-none ${walkInErrors.service_type ? "ring-1 ring-red-500" : ""}`}
+                >
+                  <option value="">اختر الخدمة</option>
+                  {Object.entries(SERVICE_LABELS).filter(([k]) => k !== "pickup_request").map(([k, v]) => (
+                    <option key={k} value={k}>{v}</option>
+                  ))}
+                </select>
+                {walkInErrors.service_type && <span className="text-xs text-red-400">{walkInErrors.service_type}</span>}
+              </label>
+
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-slate-400">عدد القطع *</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={walkInForm.items_count}
+                  onChange={(e) => { setWalkInForm(f => ({ ...f, items_count: e.target.value })); setWalkInErrors(e2 => ({ ...e2, items_count: "" })); }}
+                  className={`rounded-lg bg-slate-800 p-2.5 text-sm text-white outline-none ${walkInErrors.items_count ? "ring-1 ring-red-500" : ""}`}
+                  dir="ltr"
+                />
+                {walkInErrors.items_count && <span className="text-xs text-red-400">{walkInErrors.items_count}</span>}
+              </label>
+
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-slate-400">وقت التسليم المتوقع</span>
+                <input
+                  type="datetime-local"
+                  value={walkInForm.expected_delivery_time}
+                  onChange={(e) => setWalkInForm(f => ({ ...f, expected_delivery_time: e.target.value }))}
+                  className="rounded-lg bg-slate-800 p-2.5 text-sm text-white outline-none"
+                />
+              </label>
+
+              <label className="col-span-full flex flex-col gap-1">
+                <span className="text-xs text-slate-400">ملاحظات</span>
+                <textarea
+                  rows={2}
+                  value={walkInForm.notes}
+                  onChange={(e) => setWalkInForm(f => ({ ...f, notes: e.target.value }))}
+                  className="rounded-lg bg-slate-800 p-2.5 text-sm text-white outline-none resize-none"
+                  placeholder="أي ملاحظات إضافية..."
+                />
+              </label>
+            </div>
+
+            <div className="flex justify-end gap-3 border-t border-white/10 px-6 py-4">
+              <button
+                onClick={() => { setShowWalkIn(false); setWalkInErrors({}); }}
+                className="rounded-lg bg-slate-700 px-5 py-2.5 text-sm font-bold hover:bg-slate-600"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={saveWalkIn}
+                disabled={walkInSaving}
+                className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-bold hover:bg-emerald-500 disabled:opacity-50"
+              >
+                {walkInSaving ? "جاري الحفظ..." : "حفظ الطلب"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ─── EDIT MODAL ───────────────────────────────────────────────────────── */}
       {editingOrder && editForm && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 pt-8">
@@ -946,7 +1130,12 @@ export default function AdminOrdersPage() {
                         >
                           {STATUS_LABELS[order.status as OrderStatus] ?? order.status}
                         </span>
-                        {driver && (
+                        {order.fulfillment_type === "walk_in" && (
+                          <span className="rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-0.5 text-xs font-medium text-emerald-300">
+                            🏪 طلب داخل المحل
+                          </span>
+                        )}
+                        {driver && order.fulfillment_type !== "walk_in" && (
                           <span className="rounded-full bg-purple-500/20 px-2.5 py-0.5 text-xs text-purple-300">
                             🚗 {driver}
                             {order.route_order != null && (
@@ -1007,10 +1196,18 @@ export default function AdminOrdersPage() {
                             <span className="text-yellow-200">{order.notes}</span>
                           </div>
                         )}
+                        {order.fulfillment_type === "walk_in" && (order.items_count ?? 0) > 0 && (
+                          <div className="flex gap-2">
+                            <span className="w-16 shrink-0 text-slate-400">القطع</span>
+                            <span className="font-medium text-emerald-300">
+                              {order.items_count} قطعة
+                            </span>
+                          </div>
+                        )}
                       </div>
 
-                      {/* Google Maps */}
-                      {order.google_maps_link && (
+                      {/* Google Maps — hidden for walk-in */}
+                      {order.google_maps_link && order.fulfillment_type !== "walk_in" && (
                         <div className="mb-3">
                           <a
                             href={order.google_maps_link}
@@ -1046,50 +1243,54 @@ export default function AdminOrdersPage() {
                           </select>
                         </label>
 
-                        <label className="flex flex-col gap-1">
-                          <span className="text-xs text-slate-400">السائق</span>
-                          <select
-                            value={order.assigned_driver_id ?? ""}
-                            onChange={(e) => handleDriverAssign(order, e.target.value)}
-                            className="rounded-lg bg-slate-800 p-2 text-sm text-white"
-                          >
-                            <option value="">بدون سائق</option>
-                            {drivers.map((d) => (
-                              <option key={d.id} value={d.id}>
-                                {d.name}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
+                        {order.fulfillment_type !== "walk_in" && (
+                          <label className="flex flex-col gap-1">
+                            <span className="text-xs text-slate-400">السائق</span>
+                            <select
+                              value={order.assigned_driver_id ?? ""}
+                              onChange={(e) => handleDriverAssign(order, e.target.value)}
+                              className="rounded-lg bg-slate-800 p-2 text-sm text-white"
+                            >
+                              <option value="">بدون سائق</option>
+                              {drivers.map((d) => (
+                                <option key={d.id} value={d.id}>
+                                  {d.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        )}
 
-                        <label className="flex flex-col gap-1">
-                          <span className="text-xs text-slate-400">ترتيب المسار</span>
-                          <input
-                            type="number"
-                            min="1"
-                            max="99"
-                            placeholder="—"
-                            value={
-                              routeOrderEdits[order.id] ??
-                              (order.route_order != null ? String(order.route_order) : "")
-                            }
-                            onChange={(e) =>
-                              setRouteOrderEdits((prev) => ({
-                                ...prev,
-                                [order.id]: e.target.value,
-                              }))
-                            }
-                            onBlur={(e) => saveRouteOrder(order.id, e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter")
-                                saveRouteOrder(
-                                  order.id,
-                                  (e.target as HTMLInputElement).value
-                                );
-                            }}
-                            className="rounded-lg bg-slate-800 p-2 text-sm text-white"
-                          />
-                        </label>
+                        {order.fulfillment_type !== "walk_in" && (
+                          <label className="flex flex-col gap-1">
+                            <span className="text-xs text-slate-400">ترتيب المسار</span>
+                            <input
+                              type="number"
+                              min="1"
+                              max="99"
+                              placeholder="—"
+                              value={
+                                routeOrderEdits[order.id] ??
+                                (order.route_order != null ? String(order.route_order) : "")
+                              }
+                              onChange={(e) =>
+                                setRouteOrderEdits((prev) => ({
+                                  ...prev,
+                                  [order.id]: e.target.value,
+                                }))
+                              }
+                              onBlur={(e) => saveRouteOrder(order.id, e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter")
+                                  saveRouteOrder(
+                                    order.id,
+                                    (e.target as HTMLInputElement).value
+                                  );
+                              }}
+                              className="rounded-lg bg-slate-800 p-2 text-sm text-white"
+                            />
+                          </label>
+                        )}
 
                         <label className="flex flex-col gap-1">
                           <span className="text-xs text-slate-400">تاريخ الاستلام</span>

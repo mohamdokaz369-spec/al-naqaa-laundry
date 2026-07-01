@@ -161,7 +161,8 @@ export default function TrackPage() {
   if (!order) return null;
 
   const status = order.status as OrderStatus;
-  const showDriverETA = DRIVER_VISIBLE_STATUSES.includes(status);
+  const isWalkIn = order.fulfillment_type === "walk_in";
+  const showDriverETA = DRIVER_VISIBLE_STATUSES.includes(status) && !isWalkIn;
 
   return (
     <div dir="rtl" className="min-h-screen bg-slate-950 p-6 text-white">
@@ -223,8 +224,15 @@ export default function TrackPage() {
           <div className="space-y-3 px-5 py-4">
             <DetailRow label="الاسم" value={order.customer_name} />
             <DetailRow label="الخدمة" value={order.service_type} />
+            <DetailRow
+              label="طريقة الطلب"
+              value={isWalkIn ? "داخل المحل 🏪" : "استلام من المنزل 🚗"}
+            />
+            {isWalkIn && (order.items_count ?? 0) > 0 && (
+              <DetailRow label="عدد القطع" value={`${order.items_count} قطعة`} />
+            )}
 
-            {order.pickup_date && (
+            {!isWalkIn && order.pickup_date && (
               <DetailRow
                 label="موعد الاستلام"
                 value={`${formatDate(order.pickup_date)}${order.pickup_time ? ` — ${order.pickup_time.slice(0, 5)}` : ""}`}

@@ -61,6 +61,9 @@ export const STATUS_BADGE: Record<OrderStatus, string> = {
 
 // ─── Order ───────────────────────────────────────────────────────────────────
 
+export type FulfillmentType = "home_pickup" | "walk_in";
+export type OrderSource = "website" | "walk_in" | "admin";
+
 export type Order = {
   id: number;
   order_number: string | null;
@@ -80,6 +83,9 @@ export type Order = {
   route_order: number | null;
   scheduled_at: string | null;
   estimated_arrival: string | null;
+  fulfillment_type: FulfillmentType | null;
+  order_source: OrderSource | null;
+  items_count: number | null;
   created_at: string;
   updated_at: string | null;
 };
