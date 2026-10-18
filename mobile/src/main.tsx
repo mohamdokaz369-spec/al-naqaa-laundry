@@ -12,6 +12,8 @@ import {
 import type { Order, OrderStatus } from "../../lib/types";
 import "./style.css";
 import AdminPanel from "./AdminPanel";
+import { currentPickupLocation } from "./location";
+import { googleMapsLocation } from "../../lib/maps-location";
 type Screen = "home" | "booking" | "tracking" | "staff";
 function App() {
   const [screen, setScreen] = useState<Screen>("home"),
@@ -41,6 +43,8 @@ function App() {
       cleanup?.();
     };
   }, []);
+  const [locating,setLocating]=useState(false);
+  const [locationNotice,setLocationNotice]=useState("");
   const [form, setForm] = useState({
     customer_name: "",
     phone: "",
@@ -50,6 +54,9 @@ function App() {
     pickup_time: "10:00",
     notes: "",
     whatsapp_opt_in: false,
+    location_lat: null as number | null,
+    location_lng: null as number | null,
+    google_maps_link: "",
   });
   async function run(action: () => Promise<void>) {
     if (busy) return;
@@ -98,8 +105,12 @@ function App() {
   async function book(event: FormEvent) {
     event.preventDefault();
     await run(async () => {
-      const key = await orderRequestKey(form, sessionStorage);
-      const result = await api("/api/orders", form, "POST", {
+      if (locating) throw new Error("استنّى تحديد الموقع أو جرّب مرة ثانية");
+      const linked=googleMapsLocation(form.google_maps_link);
+      const payload={...form,...linked};
+      if (!payload.address.trim() && payload.location_lat === null && !payload.google_maps_link) throw new Error("حدد الموقع أو الصق رابط خرائط أو اكتب العنوان");
+      const key = await orderRequestKey(payload, sessionStorage);
+      const result = await api("/api/orders", payload, "POST", {
         "Idempotency-Key": key,
       });
       sessionStorage.removeItem("naqaa-order-request");
@@ -231,15 +242,34 @@ function App() {
                 />
               </label>
               <label>
-                العنوان
+                العنوان أو وصف إضافي للموقع
                 <input
                   value={form.address}
                   onChange={(e) => change("address", e.target.value)}
-                  required
+                  required={!form.google_maps_link}
                   maxLength={300}
                   autoComplete="street-address"
                 />
               </label>
+              <section aria-label="موقع الاستلام">
+                <button type="button" disabled={busy || locating} onClick={async()=>{
+                  setLocating(true);setLocationNotice("");
+                  try { const location=await currentPickupLocation();setForm(f=>({...f,location_lat:location.location_lat,location_lng:location.location_lng,google_maps_link:location.google_maps_link}));setLocationNotice(`تم تحديد الموقع. الدقة التقريبية ${Math.round(location.accuracy)} متر. راجع النقطة قبل تأكيد الطلب.`); }
+                  catch(error){setLocationNotice(error instanceof Error?error.message:"تعذر تحديد الموقع");}
+                  finally{setLocating(false);}
+                }}>{locating?"جارٍ تحديد موقعك…":"📍 استخدم موقعي الحالي"}</button>
+                <p>نأخذ موقعك عند ضغط الزر فقط، ونرسله للمغسلة مع تأكيد الطلب لتسهيل الاستلام.</p>
+                {locationNotice && <p role="status">{locationNotice}</p>}
+                <label>أو الصق رابط المشاركة من Google Maps
+                  <input type="url" maxLength={500} placeholder="https://maps.app.goo.gl/…" value={form.google_maps_link} disabled={locating || busy} onChange={e=>{setForm(f=>({...f,google_maps_link:e.target.value,location_lat:null,location_lng:null}));setLocationNotice("");}}/>
+                </label>
+                <p>لموقع آخر: افتح Google Maps، اضغط مطولًا على المكان، ثم مشاركة ← نسخ الرابط والصقه هنا.</p>
+                <a href="https://www.google.com/maps" target="_blank" rel="noreferrer">افتح Google Maps لاختيار المكان ↗</a>
+                {form.google_maps_link && <div className="actions">
+                  {(()=>{try{const point=googleMapsLocation(form.google_maps_link);return <a href={point.google_maps_link} target="_blank" rel="noreferrer">راجع موقع الاستلام على Google Maps ↗</a>;}catch{return <p>رابط الخرائط غير صحيح</p>;}})()}
+                  <button type="button" disabled={locating || busy} onClick={()=>{setForm(f=>({...f,google_maps_link:"",location_lat:null,location_lng:null}));setLocationNotice("");}}>مسح الموقع</button>
+                </div>}
+              </section>
               <label>
                 الخدمة
                 <select
@@ -294,7 +324,7 @@ function App() {
                 />
                 أوافق على تأكيد الطلب وتحديثات حالته عبر واتساب. اختياري.
               </label>
-              <button className="primary" disabled={busy}>
+              <button className="primary" disabled={busy || locating}>
                 {busy ? "جارٍ الإرسال…" : "تأكيد طلب الاستلام"}
               </button>
             </form>
@@ -429,6 +459,7 @@ function App() {
                         : "نقدًا عند التسليم"}
                     </p>
                     <a href={`tel:${order.phone}`}>اتصال بالعميل</a>
+                    {order.google_maps_link && (()=>{try{return <p><a href={googleMapsLocation(order.google_maps_link!).google_maps_link} target="_blank" rel="noreferrer">📍 افتح موقع العميل على Google Maps</a></p>;}catch{return null;}})()}
                     <div className="actions">
                       {(DRIVER_STATUS_ACTIONS[order.status] ?? []).map((action) => (
                         <button

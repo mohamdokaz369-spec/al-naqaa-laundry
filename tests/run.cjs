@@ -70,3 +70,17 @@ assert.throws(()=>adminOrderPayload({...adminForm,google_maps_link:'https://evil
 assert.throws(()=>adminOrderPayload({...adminForm,phone:'invalid'},[1]));
 assert.throws(()=>adminOrderPayload({...adminForm,pickup_date:'2026-02-30'},[1]));
 console.log('Mobile admin validation checks passed: cash/zero amount, active assignment, counts, phone, dates and map links.');
+const {mapsPoint,googleMapsLocation}=require('../lib/maps-location.ts');
+assert.equal(mapsPoint(0,0).google_maps_link,'https://www.google.com/maps?q=0,0');
+assert.throws(()=>mapsPoint(91,35));assert.throws(()=>mapsPoint(NaN,35));
+assert.equal(googleMapsLocation('https://www.google.com/maps?q=32.85,35.34').location_lat,32.85);
+assert.equal(googleMapsLocation('https://maps.app.goo.gl/example').location_lat,null);
+assert.equal(googleMapsLocation('https://www.google.com/maps/place/Arraba/@32.8,35.3,12z').location_lat,null);
+assert.throws(()=>googleMapsLocation('https://google.com.evil.example/maps'));
+assert.throws(()=>googleMapsLocation('javascript:alert(1)'));
+assert.throws(()=>googleMapsLocation('https://user:pass@google.com/maps'));
+assert.equal(googleMapsLocation('').google_maps_link,'');
+console.log('Pickup maps checks passed: coordinate bounds, zero coordinates, safe links, short links and no camera-position confusion.');
+assert.equal(orderCreateSchema.safeParse({...valid,address:'',...mapsPoint(32.85,35.34)}).success,true);
+assert.equal(orderCreateSchema.safeParse({...valid,address:'',...googleMapsLocation('https://maps.app.goo.gl/example')}).success,true);
+assert.equal(orderCreateSchema.safeParse({...valid,address:'',location_lat:32.85}).success,false);

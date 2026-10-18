@@ -66,6 +66,10 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>نحتاج موقعك عند طلبك لتحديد نقطة استلام الأغراض وتوصيلها.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>نحتاج موقعك عند طلبك لتحديد نقطة استلام الأغراض وتوصيلها.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
