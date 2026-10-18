@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
 import { STATUS_LABELS, STATUS_BADGE } from "@/lib/types";
 import type { OrderStatus } from "@/lib/types";
+import { normalizeOrderNumber } from "@/lib/order-number";
 
 type Order = {
   id: number;
@@ -19,24 +19,6 @@ type Order = {
   expected_delivery_time: string | null;
   created_at: string;
 };
-
-/**
- * Normalize order number input to canonical NQ-N format.
- * Accepts: NQ-5, nq-5, nq5, 5, #5
- */
-function normalizeOrderNumber(input: string): string {
-  const s = input.trim();
-  // Already NQ-N
-  if (/^NQ-\d+$/i.test(s)) return s.toUpperCase();
-  // NQN (no dash)
-  const nqNoDash = s.match(/^nq(\d+)$/i);
-  if (nqNoDash) return `NQ-${nqNoDash[1]}`;
-  // #5 or plain digit(s)
-  const num = s.replace(/^#/, "").match(/^\d+$/);
-  if (num) return `NQ-${num[0]}`;
-  // Fallback: uppercase as-is
-  return s.toUpperCase();
-}
 
 function formatDate(dateStr: string | null) {
   if (!dateStr) return null;
@@ -75,11 +57,16 @@ export default function TrackOrderPage() {
   const [searchError, setSearchError] = useState("");
 
   // Pre-fill order number from query param but do NOT auto-search
-  // (phone is required, so we can't auto-submit without it)
+  // (phone is required, so we can't auto-submit without it). Deferred one
+  // microtask so the setState call isn't synchronous inside the effect
+  // body (react-hooks/set-state-in-effect) — harmless here since it only
+  // delays the initial fill by a tick, before the user can interact.
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const fromQuery = params.get("order");
-    if (fromQuery) setOrderNumber(fromQuery);
+    Promise.resolve().then(() => {
+      const params = new URLSearchParams(window.location.search);
+      const fromQuery = params.get("order");
+      if (fromQuery) setOrderNumber(fromQuery);
+    });
   }, []);
 
   async function handleSearch() {
@@ -93,19 +80,32 @@ export default function TrackOrderPage() {
     setSearchError("");
     setOrder(null);
 
-    const { data, error } = await supabase
-      .from("orders")
-      .select("*")
-      .eq("order_number", normalizedNum)
-      .eq("phone", normalizedPhone)
-      .single();
+    try {
+      // Lookup now goes through /api/track, which runs server-side with
+      // the service-role key and enforces the order_number + phone match
+      // there (not just as a client-supplied filter that a direct REST
+      // call with the anon key could simply omit). fetch() itself throws
+      // on a network failure (offline, DNS, CORS), distinct from a
+      // resolved non-OK response — both are handled here.
+      const res = await fetch("/api/track", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order_number: normalizedNum, phone: normalizedPhone }),
+      });
+      const result = await res.json().catch(() => null);
 
-    if (error && error.code !== "PGRST116") {
-      setSearchError("حدث خطأ أثناء البحث، حاول مرة أخرى");
+      if (!res.ok) {
+        if (res.status !== 404) setSearchError("حدث خطأ أثناء البحث، حاول مرة أخرى");
+        setOrder(null);
+      } else {
+        setOrder(result?.order ?? null);
+      }
+    } catch {
+      setSearchError("تعذّر الاتصال بالخادم، تحقق من الإنترنت وحاول مرة أخرى");
+      setOrder(null);
+    } finally {
+      setLoading(false);
     }
-
-    setOrder(data ?? null);
-    setLoading(false);
   }
 
   const canSearch = orderNumber.trim().length > 0 && phone.trim().length > 0;

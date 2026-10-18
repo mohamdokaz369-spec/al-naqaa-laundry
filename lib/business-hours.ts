@@ -1,64 +1,32 @@
-const OPEN_HOUR = 9;
-const CLOSE_HOUR = 17;
-
-export function isBusinessHours(): boolean {
-  const now = new Date();
-  const h = now.getHours();
-  const day = now.getDay(); // 0=Sun, 5=Fri, 6=Sat
-  if (day === 5 || day === 6) return false; // Friday/Saturday closed
-  return h >= OPEN_HOUR && h < CLOSE_HOUR;
+export const BUSINESS_TIME_ZONE = "Asia/Jerusalem";
+export function businessClock(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: BUSINESS_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(now);
+  const get = (key: string) => parts.find(p => p.type === key)!.value;
+  return { date: `${get("year")}-${get("month")}-${get("day")}`, time: `${get("hour")}:${get("minute")}` };
 }
-
-// Returns a time slot for the next available business window.
-// If currently within hours, returns today's next slot (rounded up to next half hour).
-// Otherwise returns 09:00 the next business day.
-export function getNextBusinessSlot(): { date: string; time: string } {
-  const now = new Date();
-  const d = new Date(now);
-
-  function isWeekend(day: number) {
-    return day === 5 || day === 6;
-  }
-
-  function nextBusinessDay(from: Date): Date {
-    const d2 = new Date(from);
-    d2.setDate(d2.getDate() + 1);
-    while (isWeekend(d2.getDay())) {
-      d2.setDate(d2.getDate() + 1);
-    }
-    return d2;
-  }
-
-  const h = d.getHours();
-  const min = d.getMinutes();
-
-  // If today is a business day and we're before closing with room for a slot
-  if (!isWeekend(d.getDay()) && h < CLOSE_HOUR - 1) {
-    if (h >= OPEN_HOUR) {
-      // Round up to next half hour
-      const roundedMin = min < 30 ? 30 : 60;
-      const slotH = roundedMin === 60 ? h + 1 : h;
-      const slotM = roundedMin === 60 ? 0 : 30;
-      if (slotH < CLOSE_HOUR) {
-        const dateStr = d.toISOString().split("T")[0];
-        const timeStr = `${String(slotH).padStart(2, "0")}:${String(slotM).padStart(2, "0")}`;
-        return { date: dateStr, time: timeStr };
-      }
-    }
-  }
-
-  // Fall through — use next business day at 09:00
-  const next = nextBusinessDay(d);
-  return {
-    date: next.toISOString().split("T")[0],
-    time: "09:00",
-  };
+export function isWorkingDate(date: string) {
+  const parsed = new Date(`${date}T12:00:00Z`);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date;
 }
-
+export function isBusinessHours(now = new Date()): boolean {
+  const { date, time } = businessClock(now);
+  return isWorkingDate(date) && time >= "09:00" && time < "18:00";
+}
+export function getNextBusinessSlot(now = new Date()): { date: string; time: string } {
+  const clock = businessClock(now);
+  let date = clock.date;
+  const [hour, minute] = clock.time.split(":").map(Number);
+  const minutes = Math.max(540, (Math.floor((hour * 60 + minute) / 30) + 1) * 30);
+  if (isWorkingDate(date) && minutes < 1080) return { date, time: `${String(Math.floor(minutes / 60)).padStart(2,"0")}:${String(minutes % 60).padStart(2,"0")}` };
+  do {
+    const next = new Date(`${date}T12:00:00Z`);
+    next.setUTCDate(next.getUTCDate() + 1);
+    date = next.toISOString().slice(0,10);
+  } while (!isWorkingDate(date));
+  return { date, time: "09:00" };
+}
 export function businessStatusMessage(): string {
-  if (isBusinessHours()) {
-    return "سيتصل بك فريقنا خلال ساعة لتأكيد موعد الاستلام.";
-  }
+  if (isBusinessHours()) return "طلبك مسجل. سيتواصل معك فريقنا لتأكيد موعد الاستلام.";
   const slot = getNextBusinessSlot();
   return `طلبك مسجل. سنتواصل معك في بداية الدوام (${slot.date} الساعة ${slot.time}) لتأكيد الموعد.`;
 }

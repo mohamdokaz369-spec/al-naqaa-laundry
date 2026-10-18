@@ -418,14 +418,14 @@ export default function HomePage() {
         <div className="mx-auto max-w-7xl px-6">
           <div className="overflow-hidden rounded-3xl border border-white/8 bg-gradient-to-br from-white/5 to-white/3 p-12 backdrop-blur-sm">
             <div className="mb-10 text-center">
-              <p className="mb-2 text-sm font-semibold uppercase tracking-widest text-cyan-400">أرقامنا تتحدث</p>
-              <h2 className="text-2xl font-extrabold md:text-3xl">ثقة مئات العملاء في عرابة والمنطقة</h2>
+              <p className="mb-2 text-sm font-semibold uppercase tracking-widest text-cyan-400">خدماتنا</p>
+              <h2 className="text-2xl font-extrabold md:text-3xl">نهتم بطلبك من الاستلام حتى التسليم</h2>
             </div>
             <div className="grid grid-cols-2 gap-8 text-center md:grid-cols-4">
               {[
-                { value: "+1000", label: "طلب مكتمل", color: "text-cyan-400", glow: "rgba(6,182,212,0.15)" },
-                { value: "+500", label: "عميل راضٍ", color: "text-blue-400", glow: "rgba(59,130,246,0.15)" },
-                { value: "98%", label: "رضا العملاء", color: "text-emerald-400", glow: "rgba(16,185,129,0.15)" },
+                { value: "✓", label: "متابعة حالة الطلب", color: "text-cyan-400", glow: "rgba(6,182,212,0.15)" },
+                { value: "✓", label: "خدمة عرابة والمنطقة", color: "text-blue-400", glow: "rgba(59,130,246,0.15)" },
+                { value: "✓", label: "عناية بالملابس", color: "text-emerald-400", glow: "rgba(16,185,129,0.15)" },
                 { value: "⚡", label: "خدمة سريعة ومنظمة", color: "text-amber-400", glow: "rgba(245,158,11,0.15)" },
               ].map((s) => (
                 <div key={s.label} className="flex flex-col items-center gap-3">
@@ -453,7 +453,7 @@ export default function HomePage() {
             جاهز لطلب الاستلام؟
           </h2>
           <p className="mx-auto mb-12 max-w-xl text-lg leading-relaxed text-slate-400">
-            انضم إلى مئات العملاء الذين يثقون في مغسلة النقاء لتنظيف ملابسهم بالجودة التي يستحقونها.
+            احجز استلام ملابسك وتابع حالة الطلب من الموقع. الدفع نقدًا عند التسليم. نعمل يوميًا من 09:00 حتى 18:00.
           </p>
           <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
             <Link

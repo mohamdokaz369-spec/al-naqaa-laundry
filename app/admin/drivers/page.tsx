@@ -2,12 +2,15 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import type { Driver } from "@/lib/types";
+import { normalizePhone } from "@/lib/phone";
 import { ToastBanner } from "@/components/Toast";
 import type { ToastState } from "@/components/Toast";
 
-const ADMIN_PASSWORD = process.env.NEXT_PUBLIC_ADMIN_PASSWORD ?? "";
+// Same reasoning as app/admin/orders/page.tsx.
+export const dynamic = "force-dynamic";
 
 export default function AdminDriversPage() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -20,12 +23,36 @@ export default function AdminDriversPage() {
 
   const [toast, setToast] = useState<ToastState | null>(null);
   const dismissToast = useCallback(() => setToast(null), []);
-  const [authenticated, setAuthenticated] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return localStorage.getItem("admin-authenticated") === "true";
-  });
-  const [password, setPassword] = useState("");
-  const [loginError, setLoginError] = useState("");
+
+  const router = useRouter();
+  // Same defense-in-depth re-check as app/admin/orders/page.tsx.
+  const [checkingAuth, setCheckingAuth] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function checkAuth() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { router.replace("/admin/login"); return; }
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+      if (profile?.role !== "admin") {
+        await supabase.auth.signOut();
+        router.replace("/admin/login?error=unauthorized");
+        return;
+      }
+      if (!cancelled) setCheckingAuth(false);
+    }
+    checkAuth();
+    return () => { cancelled = true; };
+  }, [router]);
+
+  async function logout() {
+    await supabase.auth.signOut();
+    router.push("/admin/login");
+  }
 
   async function fetchDrivers() {
     const { data, error } = await supabase
@@ -41,18 +68,24 @@ export default function AdminDriversPage() {
   }
 
   useEffect(() => {
-    fetchDrivers();
-  }, []);
+    if (checkingAuth) return;
+    // Deferred one microtask so the data fetch's setState calls aren't
+    // read as synchronous within the effect body itself
+    // (react-hooks/set-state-in-effect) — fetchDrivers() is also called
+    // from several click handlers below, so it stays a normal
+    // async/await function rather than being rewritten just for this.
+    Promise.resolve().then(() => fetchDrivers());
+  }, [checkingAuth]);
 
   async function addDriver() {
     setFormError("");
     if (!newName.trim()) { setFormError("الاسم مطلوب"); return; }
-    if (!newPhone.trim()) { setFormError("الهاتف مطلوب"); return; }
+    if (!normalizePhone(newPhone)) { setFormError("الهاتف مطلوب"); return; }
 
     setSaving(true);
     const { error } = await supabase.from("drivers").insert([{
       name: newName.trim(),
-      phone: newPhone.trim(),
+      phone: normalizePhone(newPhone),
     }]);
     setSaving(false);
 
@@ -121,59 +154,10 @@ export default function AdminDriversPage() {
     else fetchDrivers();
   }
 
-  if (!authenticated) {
-    if (!ADMIN_PASSWORD) {
-      return (
-        <div dir="rtl" className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-white">
-          <div className="w-full max-w-sm rounded-2xl border border-red-500/30 bg-red-950/40 p-6 text-center">
-            <p className="mb-2 text-3xl">⚠️</p>
-            <h1 className="mb-2 text-lg font-bold text-red-300">خطأ في الإعدادات</h1>
-            <p className="text-sm text-slate-400">
-              لم يتم تعيين متغير البيئة{" "}
-              <code className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-xs text-red-300">
-                NEXT_PUBLIC_ADMIN_PASSWORD
-              </code>
-              . يرجى إضافته في إعدادات Vercel وإعادة النشر.
-            </p>
-          </div>
-        </div>
-      );
-    }
-
-    function tryLogin() {
-      if (password === ADMIN_PASSWORD) {
-        localStorage.setItem("admin-authenticated", "true");
-        setAuthenticated(true);
-      } else {
-        setLoginError("كلمة السر غير صحيحة");
-      }
-    }
-
+  if (checkingAuth) {
     return (
-      <div dir="rtl" className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-white">
-        <div className="w-full max-w-sm rounded-2xl bg-white/10 p-6">
-          <h1 className="mb-1 text-2xl font-bold">لوحة الإدارة</h1>
-          <p className="mb-6 text-sm text-slate-400">مغسلة النقاء</p>
-          <input
-            type="password"
-            placeholder="كلمة السر"
-            value={password}
-            onChange={(e) => { setPassword(e.target.value); setLoginError(""); }}
-            onKeyDown={(e) => { if (e.key === "Enter") tryLogin(); }}
-            className={`mb-2 w-full rounded-lg bg-slate-800 p-3 text-white outline-none ${loginError ? "ring-1 ring-red-500" : ""}`}
-          />
-          {loginError && (
-            <p className="mb-3 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400 border border-red-500/20">
-              {loginError}
-            </p>
-          )}
-          <button
-            onClick={tryLogin}
-            className="mt-1 w-full rounded-lg bg-cyan-600 p-3 font-bold hover:bg-cyan-500"
-          >
-            دخول
-          </button>
-        </div>
+      <div dir="rtl" className="flex min-h-screen items-center justify-center bg-slate-950 text-white">
+        <p className="text-slate-400">جاري التحقق من الصلاحية...</p>
       </div>
     );
   }
@@ -194,10 +178,7 @@ export default function AdminDriversPage() {
             الطلبات
           </Link>
           <button
-            onClick={() => {
-              localStorage.removeItem("admin-authenticated");
-              setAuthenticated(false);
-            }}
+            onClick={logout}
             className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-bold hover:bg-red-700"
           >
             خروج

@@ -1,0 +1,1 @@
+export default function Contact() { return <main dir="rtl" className="min-h-screen bg-slate-950 p-10 text-white"><h1 className="text-2xl">التواصل مع مغسلة النقاء</h1><p className="my-6">قناة واتساب قيد التجهيز. يمكنك إرسال طلب الاستلام من الموقع.</p><a href="/request-pickup">طلب استلام</a></main>; }

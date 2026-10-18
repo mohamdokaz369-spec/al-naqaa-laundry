@@ -1,63 +1,6 @@
-# Al Naqaa Laundry Project Context
+# الوضع الحالي — 16 أكتوبر 2026
+مغسلة النقاء، عرابة. موقع عربي RTL مع حجز كضيف، تتبع، لوحة إدارة ولوحة سائق. Next.js 16.2.9 وReact 19 وSupabase Auth/RLS.
 
-## Business
-Name: Al Naqaa Laundry
-Arabic Name: مغسلة النقاء
-Location: Arraba, Israel
+التعديلات الأمنية المحلية غير منشورة. تغييرات قاعدة البيانات في migrations، ولا تُعتبر مطبقة حتى نتحقق من المشروع الفعلي. راجع README وsupabase/README.md.
 
-## Languages
-- Arabic RTL
-- Hebrew RTL
-
-## Services
-- Laundry
-- Dry Cleaning
-- Carpet Cleaning
-- Sofa Cleaning
-- Blanket Cleaning
-
-## Goal
-Build a complete digital system for Al Naqaa Laundry:
-- Website
-- Customer app later
-- Admin dashboard
-- Driver dashboard
-- WhatsApp automation
-- Online payment later
-- AI image estimation later
-
-## Current Status
-Completed:
-- Next.js project created
-- GitHub repository connected
-- Vercel deployment is working
-- Project is live online
-
-## Tech Stack
-- Next.js
-- TypeScript
-- Tailwind CSS
-- Supabase later
-- Vercel
-- GitHub
-
-## Next Task
-Build Homepage V1.
-
-Homepage should include:
-- Modern hero section
-- Arabic RTL layout
-- Services section
-- Why choose us section
-- Pickup request CTA
-- WhatsApp floating button
-- Contact section
-
-## Rules
-- Mobile-first
-- Clean code
-- Reusable components
-- Premium modern design
-- Do not add Supabase yet
-- Do not add payments yet
-- Do not add login yet
+ميزات مستقبلية تتطلب إعدادات أو قرارات العمل: العبرية وأسعار الخدمات. حسابات العملاء والدفع الإلكتروني خارج الإطلاق بقرار المستخدم. أضيف كود تطبيق الموبايل والإشعارات محليًا، وبقيت إعدادات Firebase وMeta والأجهزة والنشر.

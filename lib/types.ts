@@ -86,6 +86,9 @@ export type Order = {
   fulfillment_type: FulfillmentType | null;
   order_source: OrderSource | null;
   items_count: number | null;
+  total_amount: number | null;
+  payment_status: "unpaid" | "paid";
+  paid_at: string | null;
   created_at: string;
   updated_at: string | null;
 };

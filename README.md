@@ -1,36 +1,25 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Al Naqaa Laundry
+Next.js 16 / React 19 / TypeScript / Tailwind 4 / Supabase.
 
-## Getting Started
+## تشغيل محلي
+- Node.js 22، ثم `npm ci`.
+- انسخ `.env.example` إلى `.env.local` وأكمل القيم من مشروع Supabase التجريبي.
+- إعداد Supabase حسب `supabase/README.md`، ثم `npm run dev`.
+- الفحوص: `npm run lint`، `npm run typecheck`، `npm test`، `npm run build`.
 
-First, run the development server:
+## دورة الطلب
+العميل يحجز بدون حساب، وإنشاء وتتبع الطلب عبر API على السيرفر. الإدارة والسائق يستخدمان Supabase Auth مع profiles وRLS. رقم الطلب وتاريخ الحالة ينشآن بداخل عملية قاعدة البيانات نفسها. إعادة إرسال الطلب بنفس Idempotency-Key تعيد الطلب السابق.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+تعيين السائق لا يغير مرحلة الغسيل أو التوصيل. لوحة السائق تحدث البرنامج كل 30 ثانية وتعرض الطلبات غير المنتهية، بالإضافة للمنتهية بتاريخ اليوم. الوصول المعروض تقدير من المسافة المباشرة فقط ويُخفى عندما يكون موقع السائق أقدم من دقيقتين.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## النشر
+لا تنشر الواجهة قبل تجهيز قاعدة البيانات المتوافقة. راجع سياسات القاعدة الموجودة ولا تفترض أنها آمنة لمجرد وجود ملفات migrations. اختبر زائرًا وإدارة وسائقين وسائقًا معطّلًا قبل النشر. لا ترفع `.env.local` أو مفاتيح الخدمة.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## حدود النسخة
+لا دفع إلكتروني أو تسجيل عملاء أو ترجمة عبرية. الموبايل والإشعارات مجهزان محليًا ولم يفعّلا خارجيًا بعد. الدفع نقدًا عند التسليم مع تسجيل المبلغ والتحصيل من الإدارة. الدوام يوميًا 09:00–18:00، واتساب +972527983320. أسعار الخدمات التفصيلية تنتظر معلومات صاحب العمل. لا توجد أسعار أو بيانات تجارية مخترعة.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## اختبارات PostgreSQL محلية
+`npm install --prefix /tmp/naqaa-db @electric-sql/pglite@0.5.10` ثم `PGLITE_MODULE=/tmp/naqaa-db/node_modules/@electric-sql/pglite node tests/database.cjs`. تنشئ قاعدة مؤقتة مع محاكاة auth.uid/auth.role وأدوار Supabase، ولا تتصل ببيانات حية. هذه الاختبارات تعمل أيضًا في CI ولا تغني عن اختبار إعدادات Supabase الفعلية.
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## الموبايل والإشعارات
+واجهة React/Capacitor مستقلة ومشاريع Android/iOS في `mobile/`. صندوق الإدارة وصوت الطلب الجديد وFCM وWhatsApp outbox جاهزة بالكود. تفعيل الخدمات والأجهزة والمتاجر ليس منجزًا. راجع `docs/MOBILE_AND_NOTIFICATIONS.md` لخطوات الربط والفحوص والحدود الفعلية.

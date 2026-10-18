@@ -1,16 +1,21 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { DRIVER_STATUS_ACTIONS, STATUS_LABELS, STATUS_BADGE } from "@/lib/types";
-import type { Order, Driver, OrderStatus } from "@/lib/types";
+import type { Order, OrderStatus } from "@/lib/types";
 import { optimizeRoute } from "@/lib/route-optimizer";
+import { businessClock } from "@/lib/business-hours";
 import { whatsappUrl } from "@/lib/whatsapp";
 
-type DriverSession = {
-  driverId: number;
-  driverName: string;
-  driverPhone: string;
+// Same reasoning as app/admin/orders/page.tsx.
+export const dynamic = "force-dynamic";
+
+type DriverIdentity = {
+  id: number;
+  name: string;
+  phone: string;
 };
 
 // All statuses visible in the driver's daily program
@@ -35,15 +40,6 @@ const DONE_STATUSES = new Set<string>([
   "delivered",
 ]);
 
-function loadSession(): DriverSession | null {
-  try {
-    const raw = sessionStorage.getItem("driver-session");
-    return raw ? (JSON.parse(raw) as DriverSession) : null;
-  } catch {
-    return null;
-  }
-}
-
 // Sort orders: route_order first (nulls last), then haversine fallback
 function sortByRouteOrder(
   orders: Order[],
@@ -62,11 +58,17 @@ function sortByRouteOrder(
 }
 
 export default function DriverPage() {
-  const [session, setSession] = useState<DriverSession | null>(null);
-  const [phone, setPhone] = useState("");
-  const [loginError, setLoginError] = useState("");
-  const [loginLoading, setLoginLoading] = useState(false);
+  const router = useRouter();
 
+  // Identity now comes from the signed-in Supabase Auth user (via
+  // middleware.ts -> profiles.role === 'driver' -> profiles.driver_id),
+  // not from a phone number typed into a form with no verification.
+  // This re-check here is defense-in-depth for an already-open tab whose
+  // session expired; the real gate is middleware + RLS.
+  const [checkingAuth, setCheckingAuth] = useState(true);
+  const [driver, setDriver] = useState<DriverIdentity | null>(null);
+
+  const [error, setError] = useState("");
   const [orders, setOrders] = useState<Order[]>([]);
   const [driverLocation, setDriverLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [ordersLoading, setOrdersLoading] = useState(false);
@@ -75,29 +77,66 @@ export default function DriverPage() {
   const locationWatchRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const s = loadSession();
-    if (s) setSession(s);
-  }, []);
+    let cancelled = false;
+    async function loadDriver() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { router.replace("/driver/login"); return; }
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role, driver_id")
+        .eq("id", user.id)
+        .single();
+
+      if (profile?.role !== "driver" || !profile.driver_id) {
+        await supabase.auth.signOut();
+        router.replace("/driver/login?error=unauthorized");
+        return;
+      }
+
+      const { data: driverRow } = await supabase
+        .from("drivers")
+        .select("id, name, phone, is_active")
+        .eq("id", profile.driver_id)
+        .single();
+
+      if (!driverRow || !driverRow.is_active) {
+        await supabase.auth.signOut();
+        router.replace("/driver/login?error=unauthorized");
+        return;
+      }
+
+      if (!cancelled) {
+        setDriver({ id: driverRow.id, name: driverRow.name, phone: driverRow.phone });
+        setCheckingAuth(false);
+      }
+    }
+    loadDriver();
+    return () => { cancelled = true; };
+  }, [router]);
 
   useEffect(() => {
-    if (!session) return;
-    fetchOrders(session.driverId);
-    startLocationTracking(session.driverId);
+    if (!driver) return;
+    fetchOrders(driver.id);
+    startLocationTracking(driver.id);
+    const timer = setInterval(() => fetchOrders(driver.id), 30000);
     return () => {
+      clearInterval(timer);
       if (locationWatchRef.current !== null)
         navigator.geolocation.clearWatch(locationWatchRef.current);
     };
-  }, [session]);
+  }, [driver]);
 
   async function fetchOrders(driverId: number) {
     setOrdersLoading(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("orders")
       .select("*")
       .eq("assigned_driver_id", driverId)
       .in("status", DRIVER_PROGRAM_STATUSES)
       .order("route_order", { ascending: true });
-    setOrders((data as Order[]) || []);
+    if (error) setError("تعذر تحديث البرنامج، حاول مجددًا");
+    else { setError(""); setOrders(((data as Order[]) || []).filter(o => o.pickup_date === businessClock().date || !["completed", "delivered", "cancelled"].includes(o.status))); }
     setOrdersLoading(false);
   }
 
@@ -105,7 +144,7 @@ export default function DriverPage() {
     if (!navigator.geolocation) return;
 
     async function pushLocation(lat: number, lng: number) {
-      await supabase
+      const { error } = await supabase
         .from("drivers")
         .update({
           current_lat: lat,
@@ -113,6 +152,7 @@ export default function DriverPage() {
           last_location_update: new Date().toISOString(),
         })
         .eq("id", driverId);
+      if (error) setError("تعذر إرسال موقعك");
     }
 
     locationWatchRef.current = navigator.geolocation.watchPosition(
@@ -121,85 +161,40 @@ export default function DriverPage() {
         setDriverLocation({ lat, lng });
         pushLocation(lat, lng);
       },
-      undefined,
+      () => setError("تعذر تحديد الموقع. اسمح بالوصول للموقع من إعدادات المتصفح."),
       { enableHighAccuracy: true, maximumAge: 15000 }
     );
   }
 
-  async function login() {
-    setLoginError("");
-    const cleaned = phone.trim();
-    if (!cleaned) { setLoginError("أدخل رقم هاتفك"); return; }
-
-    setLoginLoading(true);
-    const { data } = await supabase
-      .from("drivers")
-      .select("id,name,is_active")
-      .eq("phone", cleaned)
-      .single();
-    setLoginLoading(false);
-
-    if (!data) { setLoginError("الرقم غير مسجل كسائق"); return; }
-    const d = data as Pick<Driver, "id" | "name" | "is_active">;
-    if (!d.is_active) { setLoginError("حسابك غير نشط. تواصل مع الإدارة."); return; }
-
-    const s: DriverSession = { driverId: d.id, driverName: d.name, driverPhone: cleaned };
-    sessionStorage.setItem("driver-session", JSON.stringify(s));
-    setSession(s);
-  }
-
   async function updateStatus(order: Order, newStatus: OrderStatus) {
     setUpdating(order.id);
-    await supabase
-      .from("orders")
-      .update({ status: newStatus, updated_at: new Date().toISOString() })
-      .eq("id", order.id);
-    await supabase.from("order_status_history").insert([{
-      order_id: order.id,
-      status: newStatus,
-      changed_by: `driver:${session!.driverId}`,
-    }]);
-    await fetchOrders(session!.driverId);
-    setUpdating(null);
+    try {
+      const response = await fetch("/api/mobile/orders", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: order.id, status: newStatus, expected_status: order.status }),
+      });
+      if (!response.ok) throw new Error("status_update_failed");
+      await fetchOrders(driver!.id);
+    } catch {
+      setError("تعذر تغيير الحالة أو تغيّرت من جهاز آخر. حدّث البرنامج وحاول مجددًا.");
+    } finally {
+      setUpdating(null);
+    }
   }
 
-  function logout() {
-    sessionStorage.removeItem("driver-session");
+  async function logout() {
     if (locationWatchRef.current !== null)
       navigator.geolocation.clearWatch(locationWatchRef.current);
-    setSession(null);
-    setOrders([]);
+    await supabase.auth.signOut();
+    router.push("/driver/login");
   }
 
-  // ── Login screen ─────────────────────────────────────────────────────────────
-  if (!session) {
+  // ── Loading / auth check ───────────────────────────────────────────────────
+  if (checkingAuth || !driver) {
     return (
-      <div dir="rtl" className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-white">
-        <div className="w-full max-w-sm rounded-2xl bg-white/10 p-6">
-          <div className="mb-4 text-center text-5xl">🚗</div>
-          <h1 className="mb-1 text-center text-2xl font-bold">دخول السائق</h1>
-          <p className="mb-6 text-center text-sm text-slate-400">مغسلة النقاء</p>
-          <input
-            className="mb-3 w-full rounded-xl border border-white/20 bg-transparent p-4 text-lg text-white placeholder-slate-500 outline-none"
-            placeholder="رقم هاتفك المسجل"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && login()}
-            inputMode="tel"
-          />
-          {loginError && (
-            <p className="mb-3 rounded-xl bg-red-500/10 px-3 py-2 text-sm text-red-400">
-              {loginError}
-            </p>
-          )}
-          <button
-            onClick={login}
-            disabled={loginLoading}
-            className="w-full rounded-xl bg-cyan-600 p-4 text-lg font-bold hover:bg-cyan-500 disabled:opacity-50"
-          >
-            {loginLoading ? "جاري التحقق..." : "دخول"}
-          </button>
-        </div>
+      <div dir="rtl" className="flex min-h-screen items-center justify-center bg-slate-950 text-white">
+        <p className="text-slate-400">جاري التحقق من الصلاحية...</p>
       </div>
     );
   }
@@ -215,12 +210,13 @@ export default function DriverPage() {
   return (
     <div dir="rtl" className="min-h-screen bg-slate-950 p-4 pb-10 text-white">
 
+      {error && <p role="alert" className="mb-4 rounded-xl bg-red-950 p-4">{error}</p>}
       {/* ── Header card ────────────────────────────────────────────────────── */}
       <div className="mb-5 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
         <div className="flex items-start justify-between p-4">
           <div>
-            <h1 className="text-xl font-bold">مرحباً {session.driverName} 👋</h1>
-            <p className="text-sm text-slate-400">{session.driverPhone}</p>
+            <h1 className="text-xl font-bold">مرحباً {driver.name} 👋</h1>
+            <p className="text-sm text-slate-400">{driver.phone}</p>
             <p className="mt-1 text-xs text-slate-500">
               {driverLocation ? "📍 موقعك محدد" : "⏳ جاري تحديد موقعك..."}
             </p>
@@ -263,7 +259,7 @@ export default function DriverPage() {
       {/* ── Program label ──────────────────────────────────────────────────── */}
       {totalStops > 0 && (
         <p className="mb-3 text-sm font-bold text-slate-400 px-1">
-          برنامج اليوم — {totalStops} {totalStops === 1 ? "محطة" : "محطات"}
+          الطلبات الحالية — {totalStops} {totalStops === 1 ? "محطة" : "محطات"}
         </p>
       )}
 

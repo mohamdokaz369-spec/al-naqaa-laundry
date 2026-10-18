@@ -2,8 +2,9 @@
 
 import { useCallback, useState } from "react";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
-import { businessStatusMessage } from "@/lib/business-hours";
+import { orderRequestKey } from "@/lib/order-request";
+import { isValidPhone as validatePhone } from "@/lib/validation";
+import { businessClock, businessStatusMessage } from "@/lib/business-hours";
 import { businessWhatsAppUrl } from "@/lib/whatsapp";
 import { ToastBanner } from "@/components/Toast";
 import type { ToastState } from "@/components/Toast";
@@ -38,11 +39,6 @@ type FormErrors = {
   pickupTime?: string;
 };
 
-function validatePhone(p: string): boolean {
-  const cleaned = p.replace(/\s/g, "");
-  // Israeli mobile: 05X, +9725X, 9725X — 10-13 digits
-  return /^(\+972|972|0)[5]\d{7,8}$/.test(cleaned) || /^\d{9,12}$/.test(cleaned);
-}
 
 export default function RequestPickupPage() {
   const [customerName, setCustomerName] = useState("");
@@ -51,6 +47,7 @@ export default function RequestPickupPage() {
   const [serviceType, setServiceType] = useState("");
   const [pickupDate, setPickupDate] = useState("");
   const [pickupTime, setPickupTime] = useState("");
+  const [whatsappOptIn, setWhatsappOptIn] = useState(false);
   const [notes, setNotes] = useState("");
 
   const [locationLat, setLocationLat] = useState<number | null>(null);
@@ -85,8 +82,8 @@ export default function RequestPickupPage() {
     }
     if (!hasLocation()) newErrors.location = "يجب إدخال العنوان أو تحديد الموقع";
     if (!serviceType) newErrors.serviceType = "نوع الخدمة مطلوب";
-    if (!pickupDate) newErrors.pickupDate = "تاريخ الاستلام مطلوب";
-    if (!pickupTime) newErrors.pickupTime = "وقت الاستلام مطلوب";
+    if (!pickupDate || pickupDate < businessClock().date) newErrors.pickupDate = "اختر تاريخًا حاليًا أو مستقبليًا";
+    if (!pickupTime || pickupTime < "09:00" || pickupTime >= "18:00") newErrors.pickupTime = "الدوام يوميًا من 09:00 حتى 18:00";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   }
@@ -131,10 +128,20 @@ export default function RequestPickupPage() {
         ? `https://www.google.com/maps?q=${locationLat},${locationLng}`
         : null);
 
-    const { data, error } = await supabase
-      .from("orders")
-      .insert([
-        {
+    // Order creation now happens server-side (app/api/orders/route.ts) with
+    // the service-role key and zod validation, instead of inserting
+    // directly into `orders` from the browser with the anon key.
+    //
+    // fetch() itself throws on a network failure (offline, DNS, CORS, the
+    // API route crashing before it can respond) — that's distinct from a
+    // normal non-OK HTTP response, which resolves rather than throwing.
+    // try/catch/finally handles both without ever leaving the button
+    // stuck on "loading".
+    let ok = false;
+    let result: { orderNumber?: string | null; error?: string } | null = null;
+
+    try {
+      const payload = {
           customer_name: customerName.trim(),
           phone: phone.trim(),
           address: address.trim() || null,
@@ -142,34 +149,43 @@ export default function RequestPickupPage() {
           pickup_date: pickupDate,
           pickup_time: pickupTime,
           notes: notes.trim() || null,
+          whatsapp_opt_in: whatsappOptIn,
           location_lat: locationLat,
           location_lng: locationLng,
           google_maps_link: effectiveMapsLink,
-          status: "pending",
-        },
-      ])
-      .select("id")
-      .single();
-
-    if (error) {
+      };
+      const key = await orderRequestKey(payload, sessionStorage);
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": key },
+        body: JSON.stringify(payload),
+      });
+      ok = res.ok;
+      result = await res.json().catch(() => null);
+    } catch {
+      setToast({
+        type: "error",
+        message: "تعذّر الاتصال بالخادم، تحقق من الإنترنت وحاول مرة أخرى",
+      });
+      return;
+    } finally {
       setLoading(false);
-      setToast({ type: "error", message: "حدث خطأ أثناء إرسال الطلب، حاول مرة أخرى" });
+    }
+
+    if (!ok || !result) {
+      setToast({
+        type: "error",
+        message: result?.error ?? "حدث خطأ أثناء إرسال الطلب، حاول مرة أخرى",
+      });
       return;
     }
 
-    const orderNumber = `NQ-${data.id}`;
-
-    const { error: updateError } = await supabase
-      .from("orders")
-      .update({ order_number: orderNumber })
-      .eq("id", data.id);
-
-    setLoading(false);
-
-    if (updateError) {
+    if (!result.orderNumber) {
       setToast({ type: "warning", message: "تم إنشاء الطلب لكن حدث خطأ في تعيين رقم الطلب" });
       return;
     }
+
+    const orderNumber: string = result.orderNumber;
 
     setLastOrderDetails({
       customerName: customerName.trim(),
@@ -183,6 +199,7 @@ export default function RequestPickupPage() {
     setLastOrderNumber(orderNumber);
     setSuccessMessage(businessStatusMessage());
 
+    try { sessionStorage.removeItem("naqaa-order-request"); } catch { /* Storage may be disabled. */ }
     // Reset form
     setCustomerName("");
     setPhone("");
@@ -191,6 +208,7 @@ export default function RequestPickupPage() {
     setPickupDate("");
     setPickupTime("");
     setNotes("");
+    setWhatsappOptIn(false);
     setLocationLat(null);
     setLocationLng(null);
     setGoogleMapsLink("");
@@ -204,7 +222,7 @@ export default function RequestPickupPage() {
         <ToastBanner toast={toast} onDismiss={dismissToast} />
         <div className="mx-auto mt-20 max-w-md rounded-2xl bg-white/10 p-8 text-center">
           <div className="mb-4 text-5xl">✅</div>
-          <h2 className="mb-2 text-2xl font-bold text-green-400">تم إرسال طلبك!</h2>
+          <h2 className="mb-2 text-2xl font-bold text-green-400">تم إرسال طلبك!</h2><p className="mb-3 text-slate-300">الدفع نقدًا عند التسليم. تؤكد المغسلة المبلغ بعد مراجعة القطع.</p>
           <p className="mb-4 text-sm text-slate-300">{successMessage}</p>
 
           <div className="mb-6 rounded-xl border-2 border-cyan-500 bg-cyan-500/10 p-6">
@@ -379,12 +397,14 @@ export default function RequestPickupPage() {
               )}
             </div>
 
+            <label className="flex items-start gap-3 rounded-xl bg-white/5 p-3 text-sm"><input type="checkbox" checked={whatsappOptIn} onChange={e=>setWhatsappOptIn(e.target.checked)} />أوافق على استلام تأكيد الطلب وتحديثات حالته عبر واتساب من مغسلة النقاء. الحجز متاح بدون الموافقة.</label>
             {/* Pickup date / time */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="mb-1 block text-xs text-slate-400">تاريخ الاستلام *</label>
                 <input
                   type="date"
+                  min={businessClock().date}
                   className={`w-full rounded-lg border p-3 bg-transparent text-white ${
                     errors.pickupDate ? "border-red-500" : "border-white/20"
                   }`}
@@ -403,6 +423,7 @@ export default function RequestPickupPage() {
                 <label className="mb-1 block text-xs text-slate-400">وقت الاستلام *</label>
                 <input
                   type="time"
+                  min="09:00" max="17:59"
                   className={`w-full rounded-lg border p-3 bg-transparent text-white ${
                     errors.pickupTime ? "border-red-500" : "border-white/20"
                   }`}

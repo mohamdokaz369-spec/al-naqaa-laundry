@@ -2,14 +2,26 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { ORDER_STATUSES, STATUS_LABELS, STATUS_BADGE, SERVICE_LABELS } from "@/lib/types";
 import type { Order, Driver, OrderStatus } from "@/lib/types";
 import { whatsappUrl } from "@/lib/whatsapp";
+import { businessClock } from "@/lib/business-hours";
+import { normalizePhone } from "@/lib/phone";
+import { AdminOrderAlerts } from "@/components/AdminOrderAlerts";
 import { ToastBanner } from "@/components/Toast";
 import type { ToastState } from "@/components/Toast";
 
+// Auth-gated dashboard — never statically prerender it (it depends on the
+// signed-in user's session/cookies, and a static shell would be stale or
+// crash the build if NEXT_PUBLIC_SUPABASE_* env vars aren't present at
+// build time).
+export const dynamic = "force-dynamic";
+
 type EditForm = {
+  total_amount: string;
+  payment_status: "paid" | "unpaid";
   customer_name: string;
   phone: string;
   address: string;
@@ -27,14 +39,12 @@ type EditForm = {
   scheduled_at: string;
 };
 
-const ADMIN_PASSWORD = process.env.NEXT_PUBLIC_ADMIN_PASSWORD ?? "";
-
 const DONE_STATUSES = new Set<string>([
   "picked_up", "washing", "ready", "delivering", "completed", "delivered",
 ]);
 
 function todayDate() {
-  return new Date().toISOString().split("T")[0];
+  return businessClock().date;
 }
 
 function validDateValue(value: string | null): string {
@@ -85,12 +95,42 @@ export default function AdminOrdersPage() {
   const [walkInErrors, setWalkInErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<ToastState | null>(null);
   const dismissToast = useCallback(() => setToast(null), []);
-  const [password, setPassword] = useState("");
-  const [loginError, setLoginError] = useState("");
-  const [authenticated, setAuthenticated] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return localStorage.getItem("admin-authenticated") === "true";
-  });
+  const router = useRouter();
+  // Client-side defense-in-depth: middleware.ts already redirects
+  // unauthenticated/non-admin visitors before this page renders, but we
+  // re-check here too (e.g. the session expiring while the tab stays
+  // open) and this also fetches the signed-in admin's email for the UI.
+  const [checkingAuth, setCheckingAuth] = useState(true);
+  const [adminEmail, setAdminEmail] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    async function checkAuth() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { router.replace("/admin/login"); return; }
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+      if (profile?.role !== "admin") {
+        await supabase.auth.signOut();
+        router.replace("/admin/login?error=unauthorized");
+        return;
+      }
+      if (!cancelled) {
+        setAdminEmail(user.email ?? "");
+        setCheckingAuth(false);
+      }
+    }
+    checkAuth();
+    return () => { cancelled = true; };
+  }, [router]);
+
+  async function logout() {
+    await supabase.auth.signOut();
+    router.push("/admin/login");
+  }
 
   async function fetchOrders() {
     const { data, error } = await supabase
@@ -118,25 +158,20 @@ export default function AdminOrdersPage() {
   async function updateOrder(id: number, updates: Record<string, string | number | null>) {
     const { error } = await supabase.from("orders").update(updates).eq("id", id);
     if (error) { setToast({ type: "error", message: "حدث خطأ أثناء التحديث" }); return; }
+    void fetch("/api/notifications/dispatch", {method:"POST"}).catch(()=>{});
     fetchOrders();
-  }
-
-  async function logStatusHistory(orderId: number, status: OrderStatus) {
-    await supabase.from("order_status_history").insert([
-      { order_id: orderId, status, changed_by: "admin" },
-    ]);
   }
 
   async function handleStatusChange(order: Order, newStatus: OrderStatus) {
     await updateOrder(order.id, { status: newStatus });
-    await logStatusHistory(order.id, newStatus);
+
   }
 
   async function handleDriverAssign(order: Order, driverId: string) {
     const id = driverId === "" ? null : Number(driverId);
-    const status: OrderStatus = id ? "assigned" : "scheduled";
+    const status: OrderStatus = ["pending", "scheduled", "assigned"].includes(order.status) ? (id ? "assigned" : "scheduled") : order.status;
     await updateOrder(order.id, { assigned_driver_id: id, status });
-    if (id) await logStatusHistory(order.id, "assigned");
+
   }
 
   function saveRouteOrder(orderId: number, value: string) {
@@ -154,6 +189,8 @@ export default function AdminOrdersPage() {
   function openEdit(order: Order) {
     setEditingOrder(order);
     setEditForm({
+      total_amount: order.total_amount != null ? String(order.total_amount) : "",
+      payment_status: order.payment_status ?? "unpaid",
       customer_name: order.customer_name,
       phone: order.phone,
       address: order.address ?? "",
@@ -174,11 +211,15 @@ export default function AdminOrdersPage() {
 
   async function saveEdit() {
     if (!editingOrder || !editForm) return;
+    if (!normalizePhone(editForm.phone) || !editForm.customer_name.trim()) { setToast({ type: "error", message: "الاسم ورقم هاتف صحيح مطلوبان" }); return; }
+    if (editForm.total_amount !== "" && (!Number.isFinite(Number(editForm.total_amount)) || Number(editForm.total_amount) < 0)) { setToast({ type: "error", message: "المبلغ غير صحيح" }); return; }
     setEditSaving(true);
-    const statusChanged = editForm.status !== editingOrder.status;
+
     const payload: Record<string, string | number | null> = {
+      total_amount: editForm.total_amount === "" ? null : Number(editForm.total_amount),
+      payment_status: editForm.payment_status,
       customer_name: editForm.customer_name.trim(),
-      phone: editForm.phone.trim(),
+      phone: normalizePhone(editForm.phone),
       address: editForm.address.trim() || null,
       service_type: editForm.service_type,
       status: editForm.status,
@@ -200,7 +241,8 @@ export default function AdminOrdersPage() {
       setEditSaving(false);
       return;
     }
-    if (statusChanged) await logStatusHistory(editingOrder.id, editForm.status);
+
+    void fetch("/api/notifications/dispatch", {method:"POST"}).catch(()=>{});
     setEditingOrder(null);
     setEditForm(null);
     setEditSaving(false);
@@ -220,7 +262,7 @@ export default function AdminOrdersPage() {
   async function saveWalkIn() {
     const errs: Record<string, string> = {};
     if (!walkInForm.customer_name.trim()) errs.customer_name = "الاسم مطلوب";
-    if (!walkInForm.phone.trim()) errs.phone = "الهاتف مطلوب";
+    if (!normalizePhone(walkInForm.phone)) errs.phone = "الهاتف مطلوب";
     if (!walkInForm.service_type) errs.service_type = "نوع الخدمة مطلوب";
     const cnt = parseInt(walkInForm.items_count, 10);
     if (!walkInForm.items_count || isNaN(cnt) || cnt < 1) errs.items_count = "عدد القطع يجب أن يكون 1 على الأقل";
@@ -233,7 +275,7 @@ export default function AdminOrdersPage() {
       .from("orders")
       .insert([{
         customer_name: walkInForm.customer_name.trim(),
-        phone: walkInForm.phone.trim(),
+        phone: normalizePhone(walkInForm.phone),
         service_type: walkInForm.service_type,
         items_count: cnt,
         notes: walkInForm.notes.trim() || null,
@@ -241,8 +283,8 @@ export default function AdminOrdersPage() {
         status: "washing",
         fulfillment_type: "walk_in",
         order_source: "walk_in",
-        pickup_date: now.toISOString().split("T")[0],
-        pickup_time: now.toTimeString().slice(0, 5),
+        pickup_date: businessClock(now).date,
+        pickup_time: businessClock(now).time,
         updated_at: now.toISOString(),
         address: null,
         location_lat: null,
@@ -261,8 +303,8 @@ export default function AdminOrdersPage() {
     }
 
     const orderNumber = `NQ-${data.id}`;
-    await supabase.from("orders").update({ order_number: orderNumber }).eq("id", data.id);
-    await logStatusHistory(data.id, "washing");
+    void fetch("/api/notifications/dispatch", {method:"POST"}).catch(()=>{});
+
 
     setToast({ type: "success", message: `تم إنشاء الطلب ${orderNumber} بنجاح` });
     setShowWalkIn(false);
@@ -273,9 +315,14 @@ export default function AdminOrdersPage() {
   }
 
   useEffect(() => {
-    fetchOrders();
-    fetchDrivers();
-  }, []);
+    if (checkingAuth) return;
+    // Same reasoning as app/admin/drivers/page.tsx's effect: deferred one
+    // microtask so this isn't read as a synchronous setState-in-effect.
+    Promise.resolve().then(() => {
+      fetchOrders();
+      fetchDrivers();
+    });
+  }, [checkingAuth]);
 
   const filteredOrders = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
@@ -387,59 +434,10 @@ export default function AdminOrdersPage() {
     return drivers.find((d) => d.id === id)?.name ?? null;
   }
 
-  if (!authenticated) {
-    if (!ADMIN_PASSWORD) {
-      return (
-        <div dir="rtl" className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-white">
-          <div className="w-full max-w-sm rounded-2xl border border-red-500/30 bg-red-950/40 p-6 text-center">
-            <p className="mb-2 text-3xl">⚠️</p>
-            <h1 className="mb-2 text-lg font-bold text-red-300">خطأ في الإعدادات</h1>
-            <p className="text-sm text-slate-400">
-              لم يتم تعيين متغير البيئة{" "}
-              <code className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-xs text-red-300">
-                NEXT_PUBLIC_ADMIN_PASSWORD
-              </code>
-              . يرجى إضافته في إعدادات Vercel وإعادة النشر.
-            </p>
-          </div>
-        </div>
-      );
-    }
-
-    function tryLogin() {
-      if (password === ADMIN_PASSWORD) {
-        localStorage.setItem("admin-authenticated", "true");
-        setAuthenticated(true);
-      } else {
-        setLoginError("كلمة السر غير صحيحة");
-      }
-    }
-
+  if (checkingAuth) {
     return (
-      <div dir="rtl" className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-white">
-        <div className="w-full max-w-sm rounded-2xl bg-white/10 p-6">
-          <h1 className="mb-1 text-2xl font-bold">لوحة الإدارة</h1>
-          <p className="mb-6 text-sm text-slate-400">مغسلة النقاء</p>
-          <input
-            type="password"
-            placeholder="كلمة السر"
-            value={password}
-            onChange={(e) => { setPassword(e.target.value); setLoginError(""); }}
-            onKeyDown={(e) => { if (e.key === "Enter") tryLogin(); }}
-            className={`mb-2 w-full rounded-lg bg-slate-800 p-3 text-white outline-none ${loginError ? "ring-1 ring-red-500" : ""}`}
-          />
-          {loginError && (
-            <p className="mb-3 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400 border border-red-500/20">
-              {loginError}
-            </p>
-          )}
-          <button
-            onClick={tryLogin}
-            className="w-full rounded-lg bg-cyan-600 p-3 font-bold hover:bg-cyan-500 mt-1"
-          >
-            دخول
-          </button>
-        </div>
+      <div dir="rtl" className="flex min-h-screen items-center justify-center bg-slate-950 text-white">
+        <p className="text-slate-400">جاري التحقق من الصلاحية...</p>
       </div>
     );
   }
@@ -447,11 +445,13 @@ export default function AdminOrdersPage() {
   return (
     <div dir="rtl" className="min-h-screen bg-slate-950 p-4 text-white md:p-6">
       <ToastBanner toast={toast} onDismiss={dismissToast} />
+      <AdminOrderAlerts onNewOrder={fetchOrders} />
+      <Link href="/admin/notifications" className="mb-4 inline-block text-cyan-300">إعدادات الإشعارات والرسائل ←</Link>
       {/* Header */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">لوحة الطلبات</h1>
-          <p className="text-sm text-slate-400">مغسلة النقاء</p>
+          <p className="text-sm text-slate-400">مغسلة النقاء{adminEmail ? ` — ${adminEmail}` : ""}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {/* View toggle */}
@@ -490,10 +490,7 @@ export default function AdminOrdersPage() {
             السائقون
           </Link>
           <button
-            onClick={() => {
-              localStorage.removeItem("admin-authenticated");
-              setAuthenticated(false);
-            }}
+            onClick={logout}
             className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-bold hover:bg-red-700"
           >
             خروج
@@ -764,7 +761,7 @@ export default function AdminOrdersPage() {
             <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
               <div>
                 <h2 className="text-lg font-bold">🏪 طلب داخل المحل</h2>
-                <p className="text-xs text-slate-400">يُحفظ بحالة "قيد الغسيل" مباشرةً</p>
+                <p className="text-xs text-slate-400">يُحفظ بحالة «قيد الغسيل» مباشرةً</p>
               </div>
               <button
                 onClick={() => { setShowWalkIn(false); setWalkInErrors({}); }}
@@ -1045,6 +1042,8 @@ export default function AdminOrdersPage() {
                 />
               </label>
 
+              <label className="flex flex-col gap-1"><span>المبلغ النهائي (₪)</span><input type="number" min="0" step="0.01" value={editForm.total_amount} onChange={e => setEditForm(f => f && ({ ...f, total_amount: e.target.value }))} className="rounded-lg bg-slate-800 p-2.5" /></label>
+              <label className="flex flex-col gap-1"><span>التحصيل النقدي</span><select value={editForm.payment_status} onChange={e => setEditForm(f => f && ({ ...f, payment_status: e.target.value as "paid" | "unpaid" }))} className="rounded-lg bg-slate-800 p-2.5"><option value="unpaid">لم يتم التحصيل</option><option value="paid">تم التحصيل نقدًا</option></select></label>
               <label className="col-span-full flex flex-col gap-1">
                 <span className="text-xs text-slate-400">ملاحظات</span>
                 <textarea
@@ -1190,6 +1189,7 @@ export default function AdminOrdersPage() {
                             </span>
                           </div>
                         )}
+                        <p className="my-2 text-sm">الدفع نقدًا عند التسليم · {order.total_amount == null ? "المبلغ لم يحدد" : `${order.total_amount} ₪`} · {order.payment_status === "paid" ? "تم التحصيل" : "لم يتم التحصيل"}</p>
                         {order.notes && (
                           <div className="flex gap-2">
                             <span className="w-16 shrink-0 text-slate-400">ملاحظات</span>

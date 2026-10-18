@@ -32,6 +32,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...except the documented template — no secrets in it, meant to be
+# committed so other developers/deploys know which vars to set.
+!.env.example
 
 # vercel
 .vercel

@@ -1,40 +1,10 @@
-# Al Naqaa Laundry
+# نطاق الإطلاق الحالي — النقاء
+- حجز وتتبع للزبون كضيف بدون حساب، حسب قرار المستخدم.
+- إدارة وسائق بمصادقة Supabase وصلاحيات منفصلة.
+- دوام يومي 09:00–18:00، دفع نقدًا عند التسليم، مبلغ يحدده الأدمن.
+- تطبيق واحد بواجهات للزبون والفريق على Android وiOS.
+- تنبيه إدارة عند الطلب الجديد وصوت في اللوحة، وإشعار هاتف عبر Firebase بعد الربط.
+- رسائل واتساب تشغيلية بقوالب معتمدة وموافقة العميل، مع إلغاء الاشتراك وسجل إرسال.
+- العربية RTL حاليًا، العبرية لاحقًا. لا دفع إلكتروني ولا حسابات عملاء ضمن الإطلاق.
 
-Business Name:
-مغسلة النقاء
-
-Location:
-Arraba, Israel
-
-Languages:
-- Arabic
-- Hebrew
-
-Services:
-- Laundry
-- Dry Cleaning
-- Carpet Cleaning
-- Sofa Cleaning
-- Blanket Cleaning
-
-Phase 1 Features:
-- Customer registration
-- Customer login
-- Place order
-- Order tracking
-- Admin dashboard
-- Driver dashboard
-- Mobile responsive design
-
-Technology:
-- Next.js
-- TypeScript
-- Tailwind CSS
-- Supabase
-- Vercel
-
-Security:
-- Row Level Security
-- Customers can only see their own orders
-- Drivers only see assigned orders
-- Admin sees everything
+الكود المحلي ليس إثباتًا لتفعيل الخدمات أو المتاجر؛ راجع MOBILE_AND_NOTIFICATIONS.md.

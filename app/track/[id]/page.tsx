@@ -1,21 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
 import { STATUS_LABELS, STATUS_BADGE } from "@/lib/types";
 import type { Order, OrderStatus } from "@/lib/types";
 import { businessWhatsAppUrl } from "@/lib/whatsapp";
+import { normalizeOrderNumber as normalizeOrderNumberBase } from "@/lib/order-number";
 
+// This route's [id] segment arrives URL-encoded.
 function normalizeOrderNumber(input: string): string {
-  const s = decodeURIComponent(input).trim();
-  if (/^NQ-\d+$/i.test(s)) return s.toUpperCase();
-  const nqNoDash = s.match(/^nq(\d+)$/i);
-  if (nqNoDash) return `NQ-${nqNoDash[1]}`;
-  const num = s.replace(/^#/, "").match(/^\d+$/);
-  if (num) return `NQ-${num[0]}`;
-  return s.toUpperCase();
+  return normalizeOrderNumberBase(decodeURIComponent(input));
 }
 
 function formatDate(dateStr: string | null): string | null {
@@ -54,41 +49,65 @@ export default function TrackPage() {
   const [verifying, setVerifying] = useState(false);
 
   const [order, setOrder] = useState<Order | null>(null);
-  const [loadError, setLoadError] = useState("");
   const refreshRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Lookup goes through /api/track (service-role key + server-side
+  // order_number + phone match) instead of querying `orders` directly
+  // with the anon key. refreshOrder() re-sends the same already-verified
+  // phone rather than fetching by `id` alone, since the orders table no
+  // longer grants anon access at all.
   async function verify() {
     setVerifyError("");
     const trimmedPhone = phone.trim();
     if (!trimmedPhone) { setVerifyError("أدخل رقم هاتفك"); return; }
 
     setVerifying(true);
-    const { data } = await supabase
-      .from("orders")
-      .select("*")
-      .eq("order_number", orderNum)
-      .eq("phone", trimmedPhone)
-      .single();
-    setVerifying(false);
+    try {
+      // fetch() itself throws on a network failure (offline, DNS, CORS),
+      // distinct from a resolved non-OK response — both are handled here
+      // so `verifying` never gets stuck true.
+      const res = await fetch("/api/track", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order_number: orderNum, phone: trimmedPhone }),
+      });
+      const result = await res.json().catch(() => null);
 
-    if (!data) {
-      setVerifyError("رقم الهاتف لا يطابق رقم الطلب");
-      return;
+      if (!res.ok || !result?.order) {
+        setVerifyError(res.status === 404 ? "رقم الهاتف لا يطابق رقم الطلب" : "تعذر تحميل الطلب، حاول مجددًا لاحقًا");
+        return;
+      }
+
+      setOrder(result.order as Order);
+      setVerified(true);
+    } catch {
+      setVerifyError("تعذّر الاتصال بالخادم، تحقق من الإنترنت وحاول مرة أخرى");
+    } finally {
+      setVerifying(false);
     }
-
-    setOrder(data as Order);
-    setVerified(true);
   }
 
-  async function refreshOrder() {
-    if (!order) return;
-    const { data } = await supabase
-      .from("orders")
-      .select("*")
-      .eq("id", order.id)
-      .single();
-    if (data) setOrder(data as Order);
-  }
+  // useCallback so this has a stable identity for the polling effect's
+  // dependency array below (resolves react-hooks/exhaustive-deps without
+  // re-creating/resetting the interval on every render).
+  const refreshOrder = useCallback(async () => {
+    const trimmedPhone = phone.trim();
+    if (!trimmedPhone) return;
+    try {
+      // Silent background poll (every 30s, see the effect below) — on a
+      // network failure it should just skip this round rather than throw
+      // an unhandled rejection while the connection is down.
+      const res = await fetch("/api/track", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order_number: orderNum, phone: trimmedPhone }),
+      });
+      const result = await res.json().catch(() => null);
+      if (res.ok && result?.order) setOrder(result.order as Order);
+    } catch {
+      // Ignored — the next 30s tick will retry.
+    }
+  }, [orderNum, phone]);
 
   useEffect(() => {
     if (!verified) return;
@@ -96,7 +115,7 @@ export default function TrackPage() {
     return () => {
       if (refreshRef.current) clearInterval(refreshRef.current);
     };
-  }, [verified, order?.id]);
+  }, [verified, refreshOrder]);
 
   if (!orderNum) {
     return (
@@ -150,14 +169,6 @@ export default function TrackPage() {
     );
   }
 
-  if (loadError) {
-    return (
-      <div dir="rtl" className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-white">
-        <p className="text-red-400">{loadError}</p>
-      </div>
-    );
-  }
-
   if (!order) return null;
 
   const status = order.status as OrderStatus;
@@ -201,7 +212,7 @@ export default function TrackPage() {
                 </p>
                 {order.estimated_arrival && (
                   <p className="mt-1 text-xs text-slate-400">
-                    الوصول المتوقع: {formatDateTime(order.estimated_arrival)}
+                    وصول تقريبي (بدون احتساب حركة السير): {formatDateTime(order.estimated_arrival)}
                   </p>
                 )}
               </div>

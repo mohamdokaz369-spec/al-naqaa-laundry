@@ -1,6 +1,7 @@
+import { normalizePhone } from "./phone";
 // ─── Business WhatsApp config ─────────────────────────────────────────────────
 // Change this one constant to update the number across the entire app.
-export const BUSINESS_WHATSAPP_NUMBER = "972500000000";
+export const BUSINESS_WHATSAPP_NUMBER = process.env.NEXT_PUBLIC_BUSINESS_WHATSAPP_NUMBER ?? "972527983320";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -9,7 +10,7 @@ export const BUSINESS_WHATSAPP_NUMBER = "972500000000";
  * 05XXXXXXXX → 9725XXXXXXXX, strips spaces/dashes.
  */
 export function normalizePhoneForWhatsApp(phone: string): string {
-  return phone.replace(/^0/, "972").replace(/\D/g, "");
+  return normalizePhone(phone);
 }
 
 /**
@@ -25,6 +26,7 @@ export function whatsappUrl(phone: string, message?: string): string {
  * Returns a wa.me link to the business WhatsApp number with an optional pre-filled message.
  */
 export function businessWhatsAppUrl(message?: string): string {
-  const base = `https://wa.me/${BUSINESS_WHATSAPP_NUMBER}`;
+  if (!normalizePhone(BUSINESS_WHATSAPP_NUMBER)) return "/contact";
+  const base = `https://wa.me/${normalizePhone(BUSINESS_WHATSAPP_NUMBER)}`;
   return message ? `${base}?text=${encodeURIComponent(message)}` : base;
 }
