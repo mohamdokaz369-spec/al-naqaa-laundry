@@ -55,3 +55,18 @@ console.log('Native origin preflight and untrusted origin rejection checks passe
 
 assert.match(customerStatusLabel("on_the_way"), /لاستلام أغراضك/);
 assert.match(customerStatusLabel("delivering"), /لتسليم أغراضك بعد الغسيل/);
+
+const {adminOrderPayload}=require('../mobile/src/admin-data.ts');
+const adminForm={customer_name:'Test customer',phone:'0521234567',address:'Arraba',service_type:'غسيل',status:'assigned',pickup_date:'2026-10-20',pickup_time:'10:00',notes:'',assigned_driver_id:'1',route_order:'2',items_count:'3',total_amount:'0',payment_status:'paid',google_maps_link:'',scheduled_at:'',expected_delivery_time:''};
+const adminPayload=adminOrderPayload(adminForm,[1]);
+assert.equal(adminPayload.total_amount,0);assert.equal(adminPayload.assigned_driver_id,1);assert.equal(adminPayload.items_count,3);
+assert.throws(()=>adminOrderPayload({...adminForm,total_amount:''},[1]));
+assert.throws(()=>adminOrderPayload({...adminForm,total_amount:'-1'},[1]));
+assert.throws(()=>adminOrderPayload({...adminForm,total_amount:'1.234'},[1]));
+assert.throws(()=>adminOrderPayload({...adminForm,route_order:'1.5'},[1]));
+assert.throws(()=>adminOrderPayload({...adminForm,assigned_driver_id:'2'},[1]));
+assert.equal(adminOrderPayload({...adminForm,assigned_driver_id:'2'},[1],2).assigned_driver_id,2);
+assert.throws(()=>adminOrderPayload({...adminForm,google_maps_link:'https://evil.example/maps'},[1]));
+assert.throws(()=>adminOrderPayload({...adminForm,phone:'invalid'},[1]));
+assert.throws(()=>adminOrderPayload({...adminForm,pickup_date:'2026-02-30'},[1]));
+console.log('Mobile admin validation checks passed: cash/zero amount, active assignment, counts, phone, dates and map links.');

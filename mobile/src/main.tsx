@@ -8,10 +8,10 @@ import {
   DRIVER_STATUS_ACTIONS,
   STATUS_LABELS,
   SERVICE_LABELS,
-  ORDER_STATUSES,
 } from "../../lib/types";
 import type { Order, OrderStatus } from "../../lib/types";
 import "./style.css";
+import AdminPanel from "./AdminPanel";
 type Screen = "home" | "booking" | "tracking" | "staff";
 function App() {
   const [screen, setScreen] = useState<Screen>("home"),
@@ -408,8 +408,9 @@ function App() {
                       : "🔔 فعّل إشعارات الطلب الجديد"}
                   </button>
                 )}
-                {orders.length === 0 && <p>لا توجد طلبات معروضة.</p>}
-                {orders.map((order) => (
+                {role === "admin" && <AdminPanel />}
+                {role === "driver" && orders.length === 0 && <p>لا توجد طلبات معروضة.</p>}
+                {(role === "driver" ? orders : []).map((order) => (
                   <article className="order" key={order.id}>
                     <small>{order.order_number}</small>
                     <h2>{order.customer_name}</h2>
@@ -429,12 +430,7 @@ function App() {
                     </p>
                     <a href={`tel:${order.phone}`}>اتصال بالعميل</a>
                     <div className="actions">
-                      {(role === "admin"
-                        ? ORDER_STATUSES.filter((s) => s !== order.status).map(
-                            (next) => ({ next, label: STATUS_LABELS[next] }),
-                          )
-                        : (DRIVER_STATUS_ACTIONS[order.status] ?? [])
-                      ).map((action) => (
+                      {(DRIVER_STATUS_ACTIONS[order.status] ?? []).map((action) => (
                         <button
                           disabled={busy}
                           key={action.next}

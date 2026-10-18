@@ -75,6 +75,22 @@ const assert = require('node:assert/strict');
  await db.exec("SELECT public.record_notification_delivery('message-test','read')");
  await db.exec("SELECT public.record_notification_delivery('message-test','sent')");
  assert.equal((await db.query("SELECT delivery_status FROM public.notification_outbox WHERE provider_ids @> ARRAY['message-test']")).rows[0].delivery_status,'read');
+ // Mobile administration uses the signed-in admin, never a service key.
+ await db.exec(`RESET ROLE; SET request.jwt.claim.role='authenticated'; SET request.jwt.claim.sub='11111111-1111-4111-8111-111111111111'; SET ROLE authenticated;`);
+ await db.exec(`UPDATE public.drivers SET is_active=true,name='Updated driver' WHERE id=1;
+ UPDATE public.orders SET assigned_driver_id=1,total_amount=75.50,payment_status='paid',route_order=2,notes='Admin edit',updated_at='2026-10-18T12:00:00Z' WHERE id=1;`);
+ assert.equal((await db.query('SELECT total_amount::float amount,payment_status FROM public.orders WHERE id=1')).rows[0].amount,75.5);
+ assert.equal((await db.query("UPDATE public.orders SET notes='stale' WHERE id=1 AND updated_at='2026-10-18T11:00:00Z' RETURNING id")).rows.length,0);
+ await db.exec(`INSERT INTO public.orders(customer_name,phone,service_type,status,fulfillment_type,order_source,items_count,total_amount,payment_status,request_key)
+ VALUES('Walk-in test','972501234569','غسيل','picked_up','walk_in','walk_in',2,0,'paid','44444444-4444-4444-8444-444444444444');`);
+ const walkin=(await db.query("SELECT id,order_number,paid_at FROM public.orders WHERE request_key='44444444-4444-4444-8444-444444444444'")).rows[0];
+ assert.ok(walkin.order_number);assert.ok(walkin.paid_at);
+ assert.equal((await db.query(`SELECT count(*)::int n FROM public.order_status_history WHERE order_id=${walkin.id}`)).rows[0].n,1);
+ await db.exec(`SET request.jwt.claim.sub='22222222-2222-4222-8222-222222222222';`);
+ await assert.rejects(db.exec(`UPDATE public.orders SET total_amount=1 WHERE id=1`));
+ await assert.rejects(db.exec(`UPDATE public.orders SET assigned_driver_id=2 WHERE id=1`));
+ await assert.rejects(db.exec(`INSERT INTO public.drivers(name,phone) VALUES('Blocked','972501234560')`));
+ console.log('Mobile admin database checks passed: authenticated cash, assignment, walk-in history, stale-save protection and driver write isolation.');
  await db.close();
  console.log('PostgreSQL integration checks passed: migrations, numbering, duplicate prevention, RLS isolation, driver guards, history atomicity, cash, shared limits, notification consent, queue claims and notification privacy.');
 })().catch(error => { console.error(error); process.exitCode=1; });
