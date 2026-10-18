@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">النقاء</string>
+    <string name="title_activity_main">النقاء</string>
+    <string name="package_name">com.alnaqaa.laundry</string>
+    <string name="custom_url_scheme">com.alnaqaa.laundry</string>
+</resources>
