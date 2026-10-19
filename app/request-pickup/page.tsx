@@ -292,7 +292,7 @@ export default function RequestPickupPage() {
                 className={`w-full rounded-lg border p-3 bg-transparent text-white placeholder-slate-500 ${
                   errors.customerName ? "border-red-500" : "border-white/20"
                 }`}
-                placeholder="الاسم الكامل *"
+                aria-label="الاسم الكامل *" placeholder="الاسم الكامل *"
                 value={customerName}
                 onChange={(e) => {
                   setCustomerName(e.target.value);
@@ -310,7 +310,7 @@ export default function RequestPickupPage() {
                 className={`w-full rounded-lg border p-3 bg-transparent text-white placeholder-slate-500 ${
                   errors.phone ? "border-red-500" : "border-white/20"
                 }`}
-                placeholder="رقم الهاتف * — مثال: 0501234567"
+                aria-label="رقم الهاتف * — مثال: 0501234567" placeholder="رقم الهاتف * — مثال: 0501234567"
                 value={phone}
                 onChange={(e) => {
                   setPhone(e.target.value);
@@ -331,7 +331,7 @@ export default function RequestPickupPage() {
 
               <input
                 className="w-full rounded-lg border border-white/20 bg-transparent p-3 text-white placeholder-slate-500 mb-3"
-                placeholder="العنوان النصي (مثل: شارع الزهور، عرابة)"
+                aria-label="العنوان النصي (مثل: شارع الزهور، عرابة)" placeholder="العنوان النصي (مثل: شارع الزهور، عرابة)"
                 value={address}
                 onChange={(e) => {
                   setAddress(e.target.value);
@@ -361,7 +361,7 @@ export default function RequestPickupPage() {
 
               <input
                 className="w-full rounded-lg border border-white/20 bg-transparent p-3 text-sm text-white placeholder-slate-500"
-                placeholder="أو الصق رابط Google Maps هنا"
+                aria-label="أو الصق رابط Google Maps هنا" placeholder="أو الصق رابط Google Maps هنا"
                 value={googleMapsLink}
                 onChange={(e) => {
                   setGoogleMapsLink(e.target.value);
@@ -445,11 +445,12 @@ export default function RequestPickupPage() {
               </div>
             </div>
 
+            <p className="text-xs leading-6 text-slate-500">بإرسال الطلب، تطّلع على <Link href="/privacy" className="underline text-cyan-600">معلومات الخصوصية واستخدام بيانات الطلب</Link>. السعر والموعد يتأكدان مع الفريق.</p>
             {/* Notes */}
             <div>
               <textarea
                 className="w-full resize-none rounded-lg border border-white/20 bg-transparent p-3 text-white placeholder-slate-500"
-                placeholder="ملاحظات إضافية (اختياري)"
+                aria-label="ملاحظات إضافية (اختياري)" placeholder="ملاحظات إضافية (اختياري)"
                 rows={3}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}

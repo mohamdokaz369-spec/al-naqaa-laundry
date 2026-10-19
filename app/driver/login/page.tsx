@@ -69,7 +69,7 @@ function DriverLoginForm() {
         <input
           type="email"
           className="mb-3 w-full rounded-xl border border-white/20 bg-transparent p-4 text-lg text-white placeholder-slate-500 outline-none"
-          placeholder="البريد الإلكتروني"
+          aria-label="البريد الإلكتروني" placeholder="البريد الإلكتروني"
           value={email}
           onChange={(e) => { setEmail(e.target.value); setError(""); }}
           onKeyDown={(e) => e.key === "Enter" && login()}
@@ -78,7 +78,7 @@ function DriverLoginForm() {
         <input
           type="password"
           className="mb-3 w-full rounded-xl border border-white/20 bg-transparent p-4 text-lg text-white placeholder-slate-500 outline-none"
-          placeholder="كلمة المرور"
+          aria-label="كلمة المرور" placeholder="كلمة المرور"
           value={password}
           onChange={(e) => { setPassword(e.target.value); setError(""); }}
           onKeyDown={(e) => e.key === "Enter" && login()}

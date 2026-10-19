@@ -69,7 +69,7 @@ function AdminLoginForm() {
 
         <input
           type="email"
-          placeholder="البريد الإلكتروني"
+          aria-label="البريد الإلكتروني" placeholder="البريد الإلكتروني"
           value={email}
           onChange={(e) => { setEmail(e.target.value); setError(""); }}
           onKeyDown={(e) => { if (e.key === "Enter") login(); }}
@@ -78,7 +78,7 @@ function AdminLoginForm() {
         />
         <input
           type="password"
-          placeholder="كلمة المرور"
+          aria-label="كلمة المرور" placeholder="كلمة المرور"
           value={password}
           onChange={(e) => { setPassword(e.target.value); setError(""); }}
           onKeyDown={(e) => { if (e.key === "Enter") login(); }}

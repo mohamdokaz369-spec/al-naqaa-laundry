@@ -9,6 +9,8 @@ const cairo = Cairo({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://al-naqaa-laundry.vercel.app"),
+  applicationName: "النقاء",
   title: "مغسلة النقاء | Al Naqaa Laundry",
   description: "خدمة غسيل ملابس احترافية في عرابة — طلب الاستلام وتتبع الطلبات",
 };

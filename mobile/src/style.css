@@ -1,9 +1,9 @@
 :root {
   font-family: Tahoma, Arial, sans-serif;
-  background: #071824;
-  color: #f5faf9;
+  background: #f3f8f6;
+  color: #193e3a;
   font-synthesis: none;
-  --accent: #91e4cb;
+  --accent: #d1ecdf;
 }
 * {
   box-sizing: border-box;
@@ -26,9 +26,9 @@ textarea {
 }
 button {
   cursor: pointer;
-  border: 1px solid #28404b;
+  border: 1px solid #cbded5;
   border-radius: 14px;
-  background: #112b36;
+  background: #ffffff;
   color: inherit;
   padding: 13px 17px;
   min-height: 48px;
@@ -50,7 +50,7 @@ header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid #203641;
+  border-bottom: 1px solid #d9e7e1;
 }
 .brand {
   background: transparent;
@@ -65,7 +65,7 @@ header {
   font-size: 10px;
   font-weight: 400;
   letter-spacing: 2px;
-  color: #a5bbc3;
+  color: #526f68;
   margin-top: 4px;
 }
 .hours {
@@ -93,7 +93,7 @@ h2 {
   font-size: 22px;
 }
 p {
-  color: #b5c8ce;
+  color: #526f68;
   line-height: 1.9;
 }
 a {
@@ -110,9 +110,9 @@ a {
 }
 .services article {
   padding: 20px;
-  border: 1px solid #24414b;
+  border: 1px solid #d9e7e1;
   border-radius: 18px;
-  background: linear-gradient(145deg, #12303a, #0b222d);
+  background: #ffffff;
 }
 .services span {
   color: var(--accent);
@@ -136,17 +136,17 @@ label {
   display: grid;
   gap: 8px;
   font-size: 14px;
-  color: #c5d7dd;
+  color: #526f68;
 }
 input,
 select,
 textarea {
   width: 100%;
   padding: 14px;
-  border: 1px solid #35505b;
+  border: 1px solid #cbded5;
   border-radius: 12px;
-  background: #102a35;
-  color: #fff;
+  background: #ffffff;
+  color: #193e3a;
   min-height: 48px;
 }
 input:focus,
@@ -172,8 +172,8 @@ textarea:focus {
 }
 .order {
   padding: 22px;
-  background: #0f2b36;
-  border: 1px solid #284650;
+  background: #ffffff;
+  border: 1px solid #d9e7e1;
   border-radius: 20px;
   margin: 18px 0;
 }
@@ -184,7 +184,7 @@ textarea:focus {
 .badge {
   display: inline-block;
   border-radius: 30px;
-  background: #285347;
+  background: #d1ecdf;
   padding: 6px 13px;
   font-size: 12px;
 }
@@ -200,9 +200,9 @@ textarea:focus {
 }
 .notice {
   padding: 16px;
-  background: #1e403d;
+  background: #e7f3ed;
   border-radius: 14px;
-  border: 1px solid #4c8a78;
+  border: 1px solid #b7dbc9;
 }
 nav {
   position: fixed;
@@ -212,9 +212,9 @@ nav {
   display: flex;
   justify-content: center;
   gap: 5px;
-  background: #0a202ced;
+  background: #ffffffed;
   padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
-  border-top: 1px solid #2a424c;
+  border-top: 1px solid #d9e7e1;
   backdrop-filter: blur(15px);
 }
 nav button {
@@ -222,10 +222,19 @@ nav button {
   max-width: 150px;
   border: none;
   background: transparent;
-  color: #9fb6bf;
+  color: #526f68;
   font-size: 14px;
 }
 nav button.selected {
-  background: #193d45;
+  background: #d1ecdf;
   color: var(--accent);
 }
+
+/* Calm, light laundry palette shared with the website. */
+:root { color-scheme: light; }
+input, select, textarea { background: #fff; color: #193e3a; border-color: #cbded5; }
+.order, .card { background: #fff; border-color: #d9e7e1; }
+nav { background: #fff; border-color: #d9e7e1; }
+nav button.active { background: #d1ecdf; color: #185642; }
+a, .hero small, .hours { color: #236b53; }
+:focus-visible { outline: 3px solid #27816b; outline-offset: 3px; }

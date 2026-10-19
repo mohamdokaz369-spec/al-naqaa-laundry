@@ -1,26 +1,54 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
+  --background: #f3f8f6;
+  --foreground: #193e3a;
 }
-
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-cairo);
+  --color-slate-950: #f3f8f6;
+  --color-slate-900: #ffffff;
+  --color-slate-800: #e5f0ec;
+  --color-slate-700: #46635d;
+  --color-slate-600: #526f68;
+  --color-slate-500: #607a74;
+  --color-slate-400: #526f68;
+  --color-slate-300: #3d6259;
+  --color-slate-200: #234d43;
+  --color-cyan-800: #d7eee5;
+  --color-cyan-600: #16745f;
+  --color-cyan-500: #218570;
+  --color-cyan-400: #19725e;
+  --color-cyan-300: #176650;
+  --color-red-300: #a02c38;
+  --color-red-400: #ac3440;
+  --color-green-300: #236847;
+  --color-green-400: #23764c;
+  --color-emerald-300: #236847;
+  --color-amber-300: #815909;
+  --color-amber-400: #8b620d;
+  --color-yellow-300: #815909;
+  --color-blue-400: #397c78;
 }
+body { background: var(--background); color: var(--foreground); font-family: var(--font-cairo), Arial, sans-serif; }
+/* Existing operational screens share the same light surfaces and readable ink. */
+.text-white { color: var(--foreground); }
+[class*="border-white/"] { border-color: #d9e7e1; }
+[class*="bg-white/"] { background-color: #ffffff; }
+.bg-cyan-600, .bg-cyan-600:hover, .bg-slate-700 { color: #ffffff; }
+.bg-cyan-800 { color: #185642; }
+.text-slate-900 { color: #193e3a; }
+input, select, textarea { color-scheme: light; }
+input:not([type="checkbox"]):not([type="radio"]), select, textarea { background-color: #ffffff; color: #193e3a; border-color: #cbded5; }
+input::placeholder, textarea::placeholder { color: #637e74; }
+:focus-visible { outline: 3px solid #27816b; outline-offset: 3px; }
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+button, a { touch-action: manipulation; }
+button:not(:disabled) { cursor: pointer; }
+::selection { background: #c8ebdc; color: #143f30; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-}
+.bg-blue-600, .bg-red-600, .bg-green-600, .bg-emerald-600 { color: #fff; }

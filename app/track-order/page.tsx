@@ -129,14 +129,14 @@ export default function TrackOrderPage() {
           <div className="flex flex-col gap-3">
             <input
               className="w-full rounded-lg border border-white/20 bg-transparent p-3 placeholder-slate-500 uppercase"
-              placeholder="رقم الطلب — مثال: NQ-12 أو 12"
+              aria-label="رقم الطلب — مثال: NQ-12 أو 12" placeholder="رقم الطلب — مثال: NQ-12 أو 12"
               value={orderNumber}
               onChange={(e) => setOrderNumber(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && canSearch && handleSearch()}
             />
             <input
               className="w-full rounded-lg border border-white/20 bg-transparent p-3 placeholder-slate-500"
-              placeholder="رقم الهاتف المسجل في الطلب"
+              aria-label="رقم الهاتف المسجل في الطلب" placeholder="رقم الهاتف المسجل في الطلب"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && canSearch && handleSearch()}
