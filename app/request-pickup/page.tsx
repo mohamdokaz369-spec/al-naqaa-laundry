@@ -445,7 +445,7 @@ export default function RequestPickupPage() {
               </div>
             </div>
 
-            <p className="text-xs leading-6 text-slate-500">بإرسال الطلب، تطّلع على <Link href="/privacy" className="underline text-cyan-600">معلومات الخصوصية واستخدام بيانات الطلب</Link>. السعر والموعد يتأكدان مع الفريق.</p>
+            <p className="text-xs leading-6 text-slate-500">بإرسال الطلب، تطّلع على <Link href="/privacy" className="underline text-cyan-600">معلومات الخصوصية واستخدام بيانات الطلب</Link>. الإدارة تحدّد السعر حسب القطع والخدمة وتؤكّده معك، والموعد يتأكد مع الفريق.</p>
             {/* Notes */}
             <div>
               <textarea

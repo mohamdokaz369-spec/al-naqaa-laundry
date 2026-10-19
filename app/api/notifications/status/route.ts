@@ -12,7 +12,7 @@ export async function GET(req: Request) {
   return NextResponse.json(
     {
       configured: {
-        push: !!process.env.FIREBASE_SERVICE_ACCOUNT_JSON,
+        push: !!(process.env.FIREBASE_SERVICE_ACCOUNT_JSON || (process.env.WEB_PUSH_PUBLIC_KEY && process.env.WEB_PUSH_PRIVATE_KEY)),
         whatsapp: !!(
           process.env.WHATSAPP_ACCESS_TOKEN &&
           process.env.WHATSAPP_PHONE_NUMBER_ID &&

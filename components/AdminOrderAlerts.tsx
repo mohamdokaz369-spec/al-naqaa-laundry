@@ -1,4 +1,5 @@
 "use client";
+import { subscribeAdminPush } from "@/lib/web-push-client";
 import { useEffect, useRef, useState } from "react";
 type Notice = {
   id: number;
@@ -9,6 +10,7 @@ type Notice = {
 export function AdminOrderAlerts({ onNewOrder, onOpenOrder }: { onNewOrder: () => void; onOpenOrder: (id: number) => void }) {
   const [notices, setNotices] = useState<Notice[]>([]);
   const [error, setError] = useState("");
+  const [testResult, setTestResult] = useState("");
   const [sound, setSound] = useState(false);
   const [browserEnabled, setBrowserEnabled] = useState(false);
   const openOrder = useRef(onOpenOrder);
@@ -38,14 +40,6 @@ export function AdminOrderAlerts({ onNewOrder, onOpenOrder }: { onNewOrder: () =
         const incoming = seen.current ? list.filter((n) => !n.read_at && !seen.current!.has(n.id)) : [];
         if (incoming.length) {
           refresh.current();
-          if (browserEnabled && "Notification" in window && Notification.permission === "granted") {
-            for (const notice of incoming) {
-              try {
-                const notification = new Notification("وصل طلب جديد للمغسلة", { body: `رقم الطلب NQ-${notice.order_id}`, tag: `order-${notice.order_id}` });
-                notification.onclick = () => { window.focus(); openOrder.current(notice.order_id); notification.close(); };
-              } catch { /* Some mobile browsers require a push service worker. Inbox remains available. */ }
-            }
-          }
           if (sound && audio.current?.state === "running") {
             const oscillator = audio.current.createOscillator(),
               gain = audio.current.createGain();
@@ -81,12 +75,15 @@ export function AdminOrderAlerts({ onNewOrder, onOpenOrder }: { onNewOrder: () =
     } catch { setError("تعذر تشغيل الصوت في هذا المتصفح"); }
   }
   async function enableBrowser() {
-    if (!("Notification" in window)) { setError("هذا المتصفح لا يدعم إشعارات الصفحة؛ استخدم التنبيه داخل اللوحة"); return; }
+    try { await subscribeAdminPush(); setBrowserEnabled(true); setError(""); }
+    catch(error) { setError(error instanceof Error ? error.message : "تعذر تفعيل الإشعارات"); }
+  }
+  async function testPush() {
     try {
-      const permission = await Notification.requestPermission();
-      setBrowserEnabled(permission === "granted");
-      if (permission !== "granted") setError("اسمح بالإشعارات من إعدادات الموقع في المتصفح");
-    } catch { setError("تعذر تفعيل إشعارات المتصفح"); }
+      const response = await fetch("/api/notifications/web-push/test", {method:"POST"});
+      const result = await response.json();
+      setTestResult(response.ok ? "تم إرسال التجربة لخدمة إشعارات جهازك؛ تأكد من ظهورها." : result.error);
+    } catch { setTestResult("تعذر إرسال التجربة"); }
   }
   async function markRead() {
     try {
@@ -115,11 +112,13 @@ export function AdminOrderAlerts({ onNewOrder, onOpenOrder }: { onNewOrder: () =
         >
           {sound ? "كتم الصوت" : "تفعيل صوت الطلب الجديد"}
         </button>
-        <button onClick={enableBrowser} disabled={browserEnabled} className="rounded bg-cyan-800 px-3 py-2">{browserEnabled ? "إشعارات المتصفح مفعّلة لهذه الجلسة" : "تفعيل إشعارات المتصفح"}</button>
+        <button onClick={enableBrowser} disabled={browserEnabled} className="rounded bg-cyan-800 px-3 py-2">{browserEnabled ? "تم تسجيل هذا المتصفح للإشعارات" : "تفعيل إشعارات الخلفية"}</button>
+        <button onClick={testPush} className="rounded bg-cyan-800 px-3 py-2">إرسال إشعار تجريبي</button>
         <button onClick={markRead} className="rounded bg-slate-700 px-3 py-2">
           تحديد كمقروء
         </button>
       </div>
+      {testResult && <p role="status" className="mt-2">{testResult}</p>}
       {error && <p role="alert">{error}</p>}
       {notices
         .filter((n) => !n.read_at)
@@ -130,7 +129,7 @@ export function AdminOrderAlerts({ onNewOrder, onOpenOrder }: { onNewOrder: () =
           </p>
         ))}
       <p className="mt-2 text-xs text-slate-400">
-        التنبيه يعمل طالما لوحة الإدارة مفتوحة، وقد يتأخر في الخلفية. الإشعار بعد إغلاق الموقع بالكامل لم يُفعّل بعد.
+        الصوت يعمل واللوحة مفتوحة. إشعارات الخلفية تحتاج تفعيل هذا الجهاز والسماح بالإشعارات. على آيفون أضف الموقع للشاشة الرئيسية وافتحه منها. قد تمنع إعدادات الجهاز أو وضع عدم الإزعاج وصول التنبيه فورًا.
       </p>
     </section>
   );

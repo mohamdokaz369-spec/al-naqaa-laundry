@@ -4,6 +4,7 @@ import { getMessaging } from "firebase-admin/messaging";
 import { createServiceRoleClient } from "../supabase-server";
 import { normalizePhone } from "../phone";
 import { customerStatusLabel, pushMessage, whatsappTemplate } from "./messages";
+import { sendWebPush, webPushReady } from "./web-push";
 class DeliveryError extends Error {
   constructor(
     public category: "configuration" | "temporary" | "permanent" | "uncertain",
@@ -28,10 +29,10 @@ export async function dispatchNotifications() {
       let providerIds: string[] = [];
       if (job.channel === "push_admin") {
         const config = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-        if (!config) throw new DeliveryError("configuration");
+        if (!config && !webPushReady()) throw new DeliveryError("configuration");
         let firebase;
         try {
-          firebase =
+          if (config) firebase =
             getApps().find((app) => app.name === "naqaa-notifications") ??
             initializeApp(
               { credential: cert(JSON.parse(config)) },
@@ -47,7 +48,7 @@ export async function dispatchNotifications() {
         if (adminsError) throw new DeliveryError("temporary");
         const { data: devices, error: devicesError } = await db
           .from("push_devices")
-          .select("id,token")
+          .select("id,token,platform")
           .in(
             "user_id",
             (admins ?? []).map((a) => a.id),
@@ -62,18 +63,26 @@ export async function dispatchNotifications() {
         const delivered = new Set((receipts ?? []).map((r) => r.device_id));
         for (const device of devices.filter((d) => !delivered.has(d.id))) {
           try {
-            const id = await getMessaging(firebase).send({
+            if (device.platform === "web") {
+              if (!webPushReady()) throw new DeliveryError("configuration");
+              await sendWebPush(JSON.parse(device.token), order.order_number, job.id);
+            } else {
+              if (!firebase) throw new DeliveryError("configuration");
+              const id = await getMessaging(firebase).send({
               ...pushMessage(order.order_number, job.id),
               token: device.token,
             });
-            providerIds.push(id);
+              providerIds.push(id);
+            }
             const { error: saved } = await db
               .from("notification_push_receipts")
               .insert({ job_id: job.id, device_id: device.id });
             if (saved) throw new DeliveryError("uncertain");
           } catch (error) {
             const code = (error as { code?: string }).code;
+            const statusCode = (error as { statusCode?: number }).statusCode;
             if (
+              statusCode === 404 || statusCode === 410 ||
               code === "messaging/registration-token-not-registered" ||
               code === "messaging/invalid-registration-token"
             )

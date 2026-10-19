@@ -96,3 +96,14 @@ assert.deepEqual(pickupSlots('2026-10-18',new Date('2026-10-19T06:00:00Z')),[]);
 assert.deepEqual(pickupSlots('2026-02-30',new Date('2026-02-01T06:00:00Z')),[]);
 assert.equal(pickupSlots('2026-12-01',new Date('2026-12-01T07:00:00Z'))[0],'09:30');
 console.log('Booking calendar checks passed: closing boundary, future days after hours, invalid dates and winter timezone.');
+
+(async()=>{
+ const vm=require('node:vm'),fs=require('node:fs');
+ const handlers={};let shown,opened;
+ const self={addEventListener:(name,fn)=>handlers[name]=fn,registration:{showNotification:async(title,options)=>{shown={title,...options};}},clients:{matchAll:async()=>[],openWindow:async(url)=>{opened=url;}}};
+ vm.runInNewContext(fs.readFileSync(require('node:path').join(__dirname,'../public/admin-push-sw.js'),'utf8'),{self,URL});
+ let done;handlers.push({data:{json:()=>({title:'New order',body:'NQ-1',tag:'event-1',url:'https://evil.example'})},waitUntil:p=>{done=p;}});await done;
+ assert.equal(shown.data.url,'/admin/orders');assert.equal(shown.tag,'event-1');
+ handlers.notificationclick({notification:{close(){}},waitUntil:p=>{done=p;}});await done;assert.equal(opened,'/admin/orders');
+ console.log('Background push checks passed: visible notification, deduplication tag and fixed same-site destination.');
+})().catch(error=>{console.error(error);process.exitCode=1;});
