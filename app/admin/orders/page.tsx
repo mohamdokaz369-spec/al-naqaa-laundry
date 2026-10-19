@@ -360,7 +360,7 @@ export default function AdminOrdersPage() {
         .toLowerCase();
 
       const normalizedQuery = q.replace("#", "");
-      const matchesSearch =
+      const matchesSearch = /^nq-\d+$/.test(q) ? q === `nq-${order.id}` :
         !q ||
         searchableText.includes(q) ||
         searchableText.includes(normalizedQuery) ||
@@ -445,7 +445,7 @@ export default function AdminOrdersPage() {
   return (
     <div dir="rtl" className="min-h-screen bg-slate-950 p-4 text-white md:p-6">
       <ToastBanner toast={toast} onDismiss={dismissToast} />
-      <AdminOrderAlerts onNewOrder={fetchOrders} />
+      <AdminOrderAlerts onNewOrder={fetchOrders} onOpenOrder={(id) => { setSelectedDate(""); setStatusTab(""); setDriverFilter(""); setSearchTerm(`NQ-${id}`); }} />
       <Link href="/admin/notifications" className="mb-4 inline-block text-cyan-300">إعدادات الإشعارات والرسائل ←</Link>
       {/* Header */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
