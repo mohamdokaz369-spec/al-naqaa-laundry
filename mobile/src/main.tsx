@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import type { FormEvent } from "react";
 import { api, auth, enablePush, disablePush, listenForPush } from "./api";
 import { orderRequestKey } from "../../lib/order-request";
-import { businessClock } from "../../lib/business-hours";
+import { getNextBusinessSlot, pickupSlots } from "../../lib/business-hours";
 import {
   DRIVER_STATUS_ACTIONS,
   STATUS_LABELS,
@@ -45,13 +45,15 @@ function App() {
   }, []);
   const [locating,setLocating]=useState(false);
   const [locationNotice,setLocationNotice]=useState("");
+  const [bookingNow, setBookingNow] = useState(() => new Date());
+  useEffect(() => { const timer = setInterval(() => setBookingNow(new Date()), 30000); return () => clearInterval(timer); }, []);
   const [form, setForm] = useState({
     customer_name: "",
     phone: "",
     address: "",
     service_type: "غسيل",
-    pickup_date: businessClock().date,
-    pickup_time: "10:00",
+    pickup_date: getNextBusinessSlot().date,
+    pickup_time: getNextBusinessSlot().time,
     notes: "",
     whatsapp_opt_in: false,
     location_lat: null as number | null,
@@ -290,22 +292,22 @@ function App() {
                   تاريخ الاستلام
                   <input
                     type="date"
-                    min={businessClock().date}
+                    min={getNextBusinessSlot(bookingNow).date}
                     value={form.pickup_date}
-                    onChange={(e) => change("pickup_date", e.target.value)}
+                    onChange={(e) => setForm(f => ({...f, pickup_date: e.target.value, pickup_time: ""}))}
                     required
                   />
                 </label>
                 <label>
                   الوقت
-                  <input
-                    type="time"
-                    min="09:00"
-                    max="17:59"
+                  <select
                     value={form.pickup_time}
                     onChange={(e) => change("pickup_time", e.target.value)}
                     required
-                  />
+                  >
+                    <option value="">اختر الوقت</option>
+                    {pickupSlots(form.pickup_date, bookingNow).map(time => <option key={time} value={time}>{time}</option>)}
+                  </select>
                 </label>
               </div>
               <label>

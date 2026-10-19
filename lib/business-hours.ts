@@ -30,3 +30,15 @@ export function businessStatusMessage(): string {
   const slot = getNextBusinessSlot();
   return `طلبك مسجل. سنتواصل معك في بداية الدوام (${slot.date} الساعة ${slot.time}) لتأكيد الموعد.`;
 }
+
+/** Available pickup appointments in the laundry timezone; closing time is excluded. */
+export function pickupSlots(date: string, now = new Date()): string[] {
+  const clock = businessClock(now);
+  if (!isWorkingDate(date) || date < clock.date) return [];
+  const slots: string[] = [];
+  for (let minute = 9 * 60; minute < 18 * 60; minute += 30) {
+    const time = `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+    if (date > clock.date || time > clock.time) slots.push(time);
+  }
+  return slots;
+}

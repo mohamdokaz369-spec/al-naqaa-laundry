@@ -84,3 +84,15 @@ console.log('Pickup maps checks passed: coordinate bounds, zero coordinates, saf
 assert.equal(orderCreateSchema.safeParse({...valid,address:'',...mapsPoint(32.85,35.34)}).success,true);
 assert.equal(orderCreateSchema.safeParse({...valid,address:'',...googleMapsLocation('https://maps.app.goo.gl/example')}).success,true);
 assert.equal(orderCreateSchema.safeParse({...valid,address:'',location_lat:32.85}).success,false);
+
+const {pickupSlots,isBusinessHours}=require('../lib/business-hours.ts');
+assert.equal(isBusinessHours(new Date('2026-10-19T05:59:00Z')),false);
+assert.equal(isBusinessHours(new Date('2026-10-19T06:00:00Z')),true);
+assert.equal(isBusinessHours(new Date('2026-10-19T15:00:00Z')),false);
+assert.deepEqual(pickupSlots('2026-10-19',new Date('2026-10-19T14:30:00Z')),[]);
+assert.equal(pickupSlots('2026-10-20',new Date('2026-10-19T20:00:00Z'))[0],'09:00');
+assert.equal(pickupSlots('2026-10-20',new Date('2026-10-19T20:00:00Z')).at(-1),'17:30');
+assert.deepEqual(pickupSlots('2026-10-18',new Date('2026-10-19T06:00:00Z')),[]);
+assert.deepEqual(pickupSlots('2026-02-30',new Date('2026-02-01T06:00:00Z')),[]);
+assert.equal(pickupSlots('2026-12-01',new Date('2026-12-01T07:00:00Z'))[0],'09:30');
+console.log('Booking calendar checks passed: closing boundary, future days after hours, invalid dates and winter timezone.');

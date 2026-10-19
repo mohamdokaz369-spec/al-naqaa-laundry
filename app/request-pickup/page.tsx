@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { orderRequestKey } from "@/lib/order-request";
 import { isValidPhone as validatePhone } from "@/lib/validation";
-import { businessClock, businessStatusMessage } from "@/lib/business-hours";
+import { businessStatusMessage, getNextBusinessSlot, pickupSlots } from "@/lib/business-hours";
 import { businessWhatsAppUrl } from "@/lib/whatsapp";
 import { ToastBanner } from "@/components/Toast";
 import type { ToastState } from "@/components/Toast";
@@ -41,6 +41,8 @@ type FormErrors = {
 
 
 export default function RequestPickupPage() {
+  const [clockNow, setClockNow] = useState(() => new Date());
+  useEffect(() => { const timer = setInterval(() => setClockNow(new Date()), 30000); return () => clearInterval(timer); }, []);
   const [customerName, setCustomerName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
@@ -82,8 +84,8 @@ export default function RequestPickupPage() {
     }
     if (!hasLocation()) newErrors.location = "يجب إدخال العنوان أو تحديد الموقع";
     if (!serviceType) newErrors.serviceType = "نوع الخدمة مطلوب";
-    if (!pickupDate || pickupDate < businessClock().date) newErrors.pickupDate = "اختر تاريخًا حاليًا أو مستقبليًا";
-    if (!pickupTime || pickupTime < "09:00" || pickupTime >= "18:00") newErrors.pickupTime = "الدوام يوميًا من 09:00 حتى 18:00";
+    if (!pickupDate || pickupDate < getNextBusinessSlot().date) newErrors.pickupDate = "اختر تاريخًا حاليًا أو مستقبليًا";
+    if (!pickupSlots(pickupDate).includes(pickupTime)) newErrors.pickupTime = "اختر موعدًا مستقبليًا متاحًا ضمن الدوام";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   }
@@ -404,13 +406,14 @@ export default function RequestPickupPage() {
                 <label className="mb-1 block text-xs text-slate-400">تاريخ الاستلام *</label>
                 <input
                   type="date"
-                  min={businessClock().date}
+                  min={getNextBusinessSlot(clockNow).date}
                   className={`w-full rounded-lg border p-3 bg-transparent text-white ${
                     errors.pickupDate ? "border-red-500" : "border-white/20"
                   }`}
                   value={pickupDate}
                   onChange={(e) => {
                     setPickupDate(e.target.value);
+                    setPickupTime("");
                     setErrors((p) => ({ ...p, pickupDate: undefined }));
                   }}
                 />
@@ -421,9 +424,8 @@ export default function RequestPickupPage() {
 
               <div>
                 <label className="mb-1 block text-xs text-slate-400">وقت الاستلام *</label>
-                <input
-                  type="time"
-                  min="09:00" max="17:59"
+                <select
+                  disabled={!pickupDate || !pickupSlots(pickupDate, clockNow).length}
                   className={`w-full rounded-lg border p-3 bg-transparent text-white ${
                     errors.pickupTime ? "border-red-500" : "border-white/20"
                   }`}
@@ -432,7 +434,11 @@ export default function RequestPickupPage() {
                     setPickupTime(e.target.value);
                     setErrors((p) => ({ ...p, pickupTime: undefined }));
                   }}
-                />
+                >
+                  <option value="">اختر وقت الاستلام</option>
+                  {pickupSlots(pickupDate, clockNow).map(time => <option key={time} value={time}>{time}</option>)}
+                </select>
+                <p className="mt-1 text-xs text-slate-400">يوميًا 09:00–18:00 بتوقيت المغسلة. آخر موعد 17:30.</p>
                 {errors.pickupTime && (
                   <p className="mt-1 text-xs text-red-400">{errors.pickupTime}</p>
                 )}

@@ -8,7 +8,7 @@ export const orderCreateSchema = z.object({
   address: z.string().trim().max(300).optional().nullable(),
   service_type: z.enum(["غسيل", "كي", "غسيل + كي", "تنظيف جاف", "سجاد", "سجاد آلي", "كنب", "بطانيات"]),
   pickup_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(d => { const n = new Date(`${d}T12:00:00Z`); return !isNaN(n.getTime()) && n.toISOString().slice(0,10) === d && isWorkingDate(d); }, "اختر يوم عمل صحيح"),
-  pickup_time: z.string().regex(/^(09|1[0-7]):[0-5]\d$/),
+  pickup_time: z.string().regex(/^(09|1[0-7]):[0-5]\d$/, "موعد الاستلام يجب أن يكون ضمن الدوام من 09:00 حتى قبل 18:00"),
   whatsapp_opt_in: z.boolean().optional().default(false),
   notes: z.string().trim().max(500).optional().nullable(),
   location_lat: z.number().min(-90).max(90).nullable().optional(),
