@@ -114,7 +114,6 @@ export default function AdminOrdersPage() {
         .eq("id", user.id)
         .single();
       if (profile?.role !== "admin") {
-        await supabase.auth.signOut();
         router.replace("/admin/login?error=unauthorized");
         return;
       }

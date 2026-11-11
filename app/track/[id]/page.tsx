@@ -8,6 +8,8 @@ import type { Order, OrderStatus } from "@/lib/types";
 import { businessWhatsAppUrl } from "@/lib/whatsapp";
 import { normalizeOrderNumber as normalizeOrderNumberBase } from "@/lib/order-number";
 
+import { forgetTrackedOrder, readTrackedOrder, rememberTrackedOrder } from "@/lib/remembered-order";
+
 // This route's [id] segment arrives URL-encoded.
 function normalizeOrderNumber(input: string): string {
   return normalizeOrderNumberBase(decodeURIComponent(input));
@@ -42,6 +44,10 @@ export default function TrackPage() {
   const params = useParams();
   const rawId = Array.isArray(params.id) ? params.id[0] : params.id;
   const orderNum = normalizeOrderNumber(rawId ?? "");
+  return <TrackedOrder key={orderNum} orderNum={orderNum} />;
+}
+
+function TrackedOrder({ orderNum }: { orderNum: string }) {
 
   const [phone, setPhone] = useState("");
   const [verified, setVerified] = useState(false);
@@ -56,9 +62,9 @@ export default function TrackPage() {
   // with the anon key. refreshOrder() re-sends the same already-verified
   // phone rather than fetching by `id` alone, since the orders table no
   // longer grants anon access at all.
-  async function verify() {
+  const verify = useCallback(async (customerPhone: string) => {
     setVerifyError("");
-    const trimmedPhone = phone.trim();
+    const trimmedPhone = customerPhone.trim();
     if (!trimmedPhone) { setVerifyError("أدخل رقم هاتفك"); return; }
 
     setVerifying(true);
@@ -80,12 +86,26 @@ export default function TrackPage() {
 
       setOrder(result.order as Order);
       setVerified(true);
+      rememberTrackedOrder({ orderNumber: orderNum, phone: trimmedPhone });
     } catch {
       setVerifyError("تعذّر الاتصال بالخادم، تحقق من الإنترنت وحاول مرة أخرى");
     } finally {
       setVerifying(false);
     }
-  }
+  }, [orderNum]);
+
+  useEffect(() => {
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      const remembered = readTrackedOrder();
+      if (remembered?.orderNumber === orderNum) {
+        setPhone(remembered.phone);
+        void verify(remembered.phone);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [orderNum, verify]);
 
   // useCallback so this has a stable identity for the polling effect's
   // dependency array below (resolves react-hooks/exhaustive-deps without
@@ -130,10 +150,10 @@ export default function TrackPage() {
       <div dir="rtl" className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-white">
         <div className="w-full max-w-sm">
           <Link
-            href="/"
+            href="/track-order" onClick={forgetTrackedOrder}
             className="mb-6 inline-flex items-center gap-2 text-sm text-slate-400 hover:text-slate-200"
           >
-            ← الرئيسية
+            تتبّع طلب جديد
           </Link>
 
           <div className="rounded-2xl bg-white/10 p-6">
@@ -149,7 +169,7 @@ export default function TrackPage() {
               placeholder="رقم الهاتف المسجل في الطلب"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && verify()}
+              onKeyDown={(e) => e.key === "Enter" && !verifying && verify(phone)}
             />
             {verifyError && (
               <p className="mb-3 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">
@@ -157,7 +177,7 @@ export default function TrackPage() {
               </p>
             )}
             <button
-              onClick={verify}
+              onClick={() => verify(phone)}
               disabled={verifying}
               className="w-full rounded-lg bg-cyan-600 p-3 font-bold hover:bg-cyan-500 disabled:opacity-50"
             >
@@ -179,10 +199,10 @@ export default function TrackPage() {
     <div dir="rtl" className="min-h-screen bg-slate-950 p-6 text-white">
       <div className="mx-auto max-w-md">
         <Link
-          href="/"
+          href="/track-order" onClick={forgetTrackedOrder}
           className="mb-6 inline-flex items-center gap-2 text-sm text-slate-400 hover:text-slate-200"
         >
-          ← الرئيسية
+          تتبّع طلب جديد
         </Link>
 
         <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/5">

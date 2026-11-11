@@ -117,7 +117,6 @@ export default function DriverPage() {
         .single();
 
       if (profile?.role !== "driver" || !profile.driver_id) {
-        await supabase.auth.signOut();
         router.replace("/driver/login?error=unauthorized");
         return;
       }
@@ -129,7 +128,6 @@ export default function DriverPage() {
         .single();
 
       if (!driverRow || !driverRow.is_active) {
-        await supabase.auth.signOut();
         router.replace("/driver/login?error=unauthorized");
         return;
       }

@@ -44,6 +44,26 @@ export async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
+  if (user && (path === "/admin/login" || path === "/driver/login")) {
+    const isAdminLogin = path === "/admin/login";
+    const { data: profile } = await supabase.from("profiles")
+      .select("role, driver_id").eq("id", user.id).single();
+    let canResume = isAdminLogin && profile?.role === "admin";
+    if (!isAdminLogin && profile?.role === "driver" && profile.driver_id) {
+      const { data: driver } = await supabase.from("drivers")
+        .select("is_active").eq("id", profile.driver_id).single();
+      canResume = driver?.is_active === true;
+    }
+    if (canResume) {
+      const url = request.nextUrl.clone();
+      url.pathname = isAdminLogin ? "/admin/orders" : "/driver";
+      url.search = "";
+      const redirect = NextResponse.redirect(url);
+      response.cookies.getAll().forEach(cookie => redirect.cookies.set(cookie));
+      return redirect;
+    }
+  }
+
   const isAdminRoute = path.startsWith("/admin") && path !== "/admin/login";
   const isDriverRoute = path.startsWith("/driver") && path !== "/driver/login";
 

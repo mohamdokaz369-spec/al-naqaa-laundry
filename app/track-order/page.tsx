@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { STATUS_LABELS, STATUS_BADGE } from "@/lib/types";
 import type { OrderStatus } from "@/lib/types";
 import { normalizeOrderNumber } from "@/lib/order-number";
+
+import { forgetTrackedOrder, readTrackedOrder, rememberTrackedOrder } from "@/lib/remembered-order";
 
 type Order = {
   id: number;
@@ -56,22 +58,9 @@ export default function TrackOrderPage() {
   const [searched, setSearched] = useState(false);
   const [searchError, setSearchError] = useState("");
 
-  // Pre-fill order number from query param but do NOT auto-search
-  // (phone is required, so we can't auto-submit without it). Deferred one
-  // microtask so the setState call isn't synchronous inside the effect
-  // body (react-hooks/set-state-in-effect) — harmless here since it only
-  // delays the initial fill by a tick, before the user can interact.
-  useEffect(() => {
-    Promise.resolve().then(() => {
-      const params = new URLSearchParams(window.location.search);
-      const fromQuery = params.get("order");
-      if (fromQuery) setOrderNumber(fromQuery);
-    });
-  }, []);
-
-  async function handleSearch() {
-    const normalizedNum = normalizeOrderNumber(orderNumber);
-    const normalizedPhone = phone.trim();
+  const searchOrder = useCallback(async (number: string, customerPhone: string) => {
+    const normalizedNum = normalizeOrderNumber(number);
+    const normalizedPhone = customerPhone.trim();
 
     if (!normalizedNum || !normalizedPhone) return;
 
@@ -99,6 +88,7 @@ export default function TrackOrderPage() {
         setOrder(null);
       } else {
         setOrder(result?.order ?? null);
+        if (result?.order) rememberTrackedOrder({ orderNumber: normalizedNum, phone: normalizedPhone });
       }
     } catch {
       setSearchError("تعذّر الاتصال بالخادم، تحقق من الإنترنت وحاول مرة أخرى");
@@ -106,6 +96,35 @@ export default function TrackOrderPage() {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      const queryOrder = normalizeOrderNumber(new URLSearchParams(window.location.search).get("order") ?? "");
+      const remembered = readTrackedOrder();
+      setOrderNumber(queryOrder || remembered?.orderNumber || "");
+      if (remembered && (!queryOrder || queryOrder === remembered.orderNumber)) {
+        setPhone(remembered.phone);
+        void searchOrder(remembered.orderNumber, remembered.phone);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [searchOrder]);
+
+  function startNewTracking() {
+    forgetTrackedOrder();
+    window.history.replaceState(null, "", "/track-order");
+    setOrderNumber("");
+    setPhone("");
+    setOrder(null);
+    setSearched(false);
+    setSearchError("");
+  }
+
+  function handleSearch() {
+    if (!loading) void searchOrder(orderNumber, phone);
   }
 
   const canSearch = orderNumber.trim().length > 0 && phone.trim().length > 0;
@@ -126,7 +145,7 @@ export default function TrackOrderPage() {
             أدخل رقم الطلب ورقم الهاتف لمعرفة حالة طلبك
           </p>
 
-          <div className="flex flex-col gap-3">
+          {!order && <div className="flex flex-col gap-3">
             <input
               className="w-full rounded-lg border border-white/20 bg-transparent p-3 placeholder-slate-500 uppercase"
               aria-label="رقم الطلب — مثال: NQ-12 أو 12" placeholder="رقم الطلب — مثال: NQ-12 أو 12"
@@ -148,7 +167,10 @@ export default function TrackOrderPage() {
             >
               {loading ? "جاري البحث..." : "تتبع الطلب"}
             </button>
-          </div>
+          </div>}
+          {!loading && (order || searched) && (
+            <button onClick={startNewTracking} className="mt-3 text-sm font-bold text-cyan-300 underline">تتبّع طلب جديد</button>
+          )}
 
           <div className="mt-6">
             {loading && (
