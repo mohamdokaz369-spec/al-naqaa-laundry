@@ -19,6 +19,8 @@ export default function AdminDriversPage() {
   const [showForm, setShowForm] = useState(false);
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [formError, setFormError] = useState("");
 
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -82,18 +84,22 @@ export default function AdminDriversPage() {
     if (!newName.trim()) { setFormError("الاسم مطلوب"); return; }
     if (!normalizePhone(newPhone)) { setFormError("الهاتف مطلوب"); return; }
 
+    if (newPassword.length < 8) { setFormError("كلمة المرور 8 أحرف على الأقل"); return; }
     setSaving(true);
-    const { error } = await supabase.from("drivers").insert([{
-      name: newName.trim(),
-      phone: normalizePhone(newPhone),
-    }]);
-    setSaving(false);
-
-    if (error) {
-      setFormError("حدث خطأ أثناء الحفظ");
+    try {
+      const response = await fetch("/api/admin/drivers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: editingId, name: newName.trim(), phone: newPhone, password: newPassword }),
+      });
+      const result = await response.json();
+      if (!response.ok) { setFormError(result.error || "حدث خطأ أثناء الحفظ"); return; }
+    } catch {
+      setFormError("تعذر الاتصال، حاول مجدداً");
       return;
-    }
-
+    } finally { setSaving(false); }
+    setNewPassword("");
+    setEditingId(null);
     setNewName("");
     setNewPhone("");
     setShowForm(false);
@@ -189,7 +195,7 @@ export default function AdminDriversPage() {
       <div className="mb-4 flex items-center justify-between">
         <p className="text-sm text-slate-400">{drivers.length} سائق مسجل</p>
         <button
-          onClick={() => setShowForm((v) => !v)}
+          onClick={() => { setEditingId(null); setNewName(""); setNewPhone(""); setNewPassword(""); setFormError(""); setShowForm((v) => !v); }}
           className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-bold hover:bg-cyan-500"
         >
           {showForm ? "إلغاء" : "+ إضافة سائق"}
@@ -198,7 +204,7 @@ export default function AdminDriversPage() {
 
       {showForm && (
         <div className="mb-6 rounded-xl bg-white/8 p-4">
-          <h2 className="mb-4 font-bold">سائق جديد</h2>
+          <h2 className="mb-4 font-bold">{editingId ? "تعيين كلمة مرور للسائق" : "سائق جديد"}</h2>
           <div className="flex flex-col gap-3">
             <input
               className="rounded-lg border border-white/20 bg-transparent p-3 text-white placeholder-slate-500"
@@ -212,6 +218,7 @@ export default function AdminDriversPage() {
               value={newPhone}
               onChange={(e) => setNewPhone(e.target.value)}
             />
+            <input type="password" autoComplete="new-password" aria-label="كلمة المرور" placeholder="كلمة المرور (8 أحرف على الأقل)" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="rounded-lg border border-white/20 bg-transparent p-3 text-white" />
             {formError && <p className="text-sm text-red-400">{formError}</p>}
             <button
               onClick={addDriver}
@@ -255,6 +262,7 @@ export default function AdminDriversPage() {
                 )}
               </div>
               <div className="flex items-center gap-2">
+                <button onClick={() => { setEditingId(d.id); setNewName(d.name); setNewPhone(d.phone); setNewPassword(""); setFormError(""); setShowForm(true); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="rounded-lg bg-cyan-700 px-3 py-1.5 text-sm font-bold">تعيين كلمة مرور</button>
                 <button
                   onClick={() => toggleActive(d)}
                   className={`rounded-lg px-3 py-1.5 text-sm font-bold ${

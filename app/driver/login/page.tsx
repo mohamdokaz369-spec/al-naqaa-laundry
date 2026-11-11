@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { normalizePhone } from "@/lib/phone";
 import { supabase } from "@/lib/supabase";
 
 // Same reasoning as app/admin/login/page.tsx.
@@ -12,27 +13,27 @@ function DriverLoginForm() {
   const searchParams = useSearchParams();
   const unauthorized = searchParams.get("error") === "unauthorized";
 
-  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   async function login() {
     setError("");
-    if (!email.trim() || !password) {
-      setError("أدخل البريد الإلكتروني وكلمة المرور");
+    if (!normalizePhone(phone) || !password) {
+      setError("أدخل رقم الهاتف وكلمة المرور");
       return;
     }
 
     setLoading(true);
     const { data, error: signInError } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
+      email: `driver.${normalizePhone(phone)}@drivers.alnaqaa.org`,
       password,
     });
 
     if (signInError || !data.user) {
       setLoading(false);
-      setError("البريد الإلكتروني أو كلمة المرور غير صحيحة");
+      setError("رقم الهاتف أو كلمة المرور غير صحيحة");
       return;
     }
 
@@ -46,6 +47,14 @@ function DriverLoginForm() {
       await supabase.auth.signOut();
       setLoading(false);
       setError("هذا الحساب غير مسجّل كسائق. تواصل مع الإدارة.");
+      return;
+    }
+
+    const { data: driver } = await supabase.from("drivers").select("is_active").eq("id", profile.driver_id).single();
+    if (!driver?.is_active) {
+      await supabase.auth.signOut();
+      setLoading(false);
+      setError("حساب السائق معطّل. تواصل مع الإدارة.");
       return;
     }
 
@@ -67,11 +76,11 @@ function DriverLoginForm() {
         )}
 
         <input
-          type="email"
+          type="tel"
           className="mb-3 w-full rounded-xl border border-white/20 bg-transparent p-4 text-lg text-white placeholder-slate-500 outline-none"
-          aria-label="البريد الإلكتروني" placeholder="البريد الإلكتروني"
-          value={email}
-          onChange={(e) => { setEmail(e.target.value); setError(""); }}
+          aria-label="رقم الهاتف" placeholder="رقم الهاتف"
+          value={phone}
+          onChange={(e) => { setPhone(e.target.value); setError(""); }}
           onKeyDown={(e) => e.key === "Enter" && login()}
           autoComplete="username"
         />

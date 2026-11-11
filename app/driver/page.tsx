@@ -28,17 +28,43 @@ const DRIVER_PROGRAM_STATUSES: OrderStatus[] = [
   "ready",
   "delivering",
   "completed",
+  "delivered",
 ];
 
-// Statuses that count as a completed stop for progress tracking
-const DONE_STATUSES = new Set<string>([
-  "picked_up",
-  "washing",
-  "ready",
-  "delivering",
-  "completed",
-  "delivered",
-]);
+type ProgramGroup = "pickup" | "delivery" | "waiting" | "ready" | "done";
+
+function programGroup(status: OrderStatus): ProgramGroup {
+  switch (status) {
+    case "picked_up":
+    case "washing": return "waiting";
+    case "ready": return "ready";
+    case "delivering": return "delivery";
+    case "completed":
+    case "delivered": return "done";
+    default: return "pickup";
+  }
+}
+
+function programSlot(order: Order) {
+  const group = programGroup(order.status);
+  if (group === "pickup") {
+    return order.scheduled_at
+      ? businessClock(new Date(order.scheduled_at))
+      : { date: order.pickup_date, time: order.pickup_time?.slice(0, 5) };
+  }
+  if (order.expected_delivery_time) return businessClock(new Date(order.expected_delivery_time));
+  if (group === "done" && order.updated_at) return businessClock(new Date(order.updated_at));
+  if (group === "waiting" && order.pickup_date) return { date: order.pickup_date, time: null };
+  return { date: null, time: null };
+}
+
+const PROGRAM_GROUPS: { key: ProgramGroup; label: string }[] = [
+  { key: "pickup", label: "استلام من الزبائن" },
+  { key: "delivery", label: "توصيل للزبائن" },
+  { key: "waiting", label: "طلبات لسه مش جاهزة" },
+  { key: "ready", label: "طلبات جاهزة للتوصيل" },
+  { key: "done", label: "طلبات تم تسليمها" },
+];
 
 // Sort orders: route_order first (nulls last), then haversine fallback
 function sortByRouteOrder(
@@ -69,6 +95,8 @@ export default function DriverPage() {
   const [driver, setDriver] = useState<DriverIdentity | null>(null);
 
   const [error, setError] = useState("");
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [showUndated, setShowUndated] = useState(false);
   const [orders, setOrders] = useState<Order[]>([]);
   const [driverLocation, setDriverLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [ordersLoading, setOrdersLoading] = useState(false);
@@ -134,9 +162,9 @@ export default function DriverPage() {
       .select("*")
       .eq("assigned_driver_id", driverId)
       .in("status", DRIVER_PROGRAM_STATUSES)
-      .order("route_order", { ascending: true });
+      .order("id");
     if (error) setError("تعذر تحديث البرنامج، حاول مجددًا");
-    else { setError(""); setOrders(((data as Order[]) || []).filter(o => o.pickup_date === businessClock().date || !["completed", "delivered", "cancelled"].includes(o.status))); }
+    else { setError(""); setOrders((data as Order[]) || []); }
     setOrdersLoading(false);
   }
 
@@ -200,11 +228,22 @@ export default function DriverPage() {
   }
 
   // ── Driver dashboard ──────────────────────────────────────────────────────────
-  const sortedOrders = sortByRouteOrder(orders, driverLocation?.lat, driverLocation?.lng);
-  const totalStops = sortedOrders.length;
-  const completedStops = sortedOrders.filter((o) => DONE_STATUSES.has(o.status)).length;
+  const today = businessClock().date;
+  const date = selectedDate ?? today;
+  function moveDate(days: number) {
+    const next = new Date(date + "T12:00:00Z");
+    next.setUTCDate(next.getUTCDate() + days);
+    setSelectedDate(next.toISOString().slice(0, 10));
+    setShowUndated(false);
+  }
+
+  const visibleOrders = orders.filter(order => {
+    const slot = programSlot(order);
+    return showUndated ? !slot.date : slot.date === date;
+  });
+  const totalStops = visibleOrders.length;
+  const completedStops = visibleOrders.filter(order => programGroup(order.status) === "done").length;
   const remainingStops = totalStops - completedStops;
-  const currentStop = sortedOrders.find((o) => !DONE_STATUSES.has(o.status));
   const progress = totalStops > 0 ? Math.round((completedStops / totalStops) * 100) : 0;
 
   return (
@@ -256,167 +295,193 @@ export default function DriverPage() {
         )}
       </div>
 
-      {/* ── Program label ──────────────────────────────────────────────────── */}
-      {totalStops > 0 && (
-        <p className="mb-3 text-sm font-bold text-slate-400 px-1">
-          الطلبات الحالية — {totalStops} {totalStops === 1 ? "محطة" : "محطات"}
-        </p>
-      )}
+      <div className="mb-5 space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+        <h2 className="font-bold">البرنامج اليومي</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={() => moveDate(-1)} className="rounded-lg bg-slate-700 px-3 py-2">السابق</button>
+          <input
+            type="date"
+            dir="ltr"
+            aria-label="تاريخ البرنامج"
+            value={date}
+            onChange={event => {
+              if (!event.target.value) return;
+              setSelectedDate(event.target.value);
+              setShowUndated(false);
+            }}
+            className="min-w-0 rounded-lg bg-slate-800 px-3 py-2 [color-scheme:dark]"
+          />
+          <button onClick={() => moveDate(1)} className="rounded-lg bg-slate-700 px-3 py-2">التالي</button>
+          <button onClick={() => { setSelectedDate(null); setShowUndated(false); }} className="rounded-lg bg-slate-700 px-3 py-2">اليوم</button>
+          <button onClick={() => setShowUndated(value => !value)} aria-pressed={showUndated} className="rounded-lg bg-slate-700 px-3 py-2 aria-pressed:bg-cyan-700">بدون موعد</button>
+        </div>
+      </div>
 
-      {/* ── Order cards ────────────────────────────────────────────────────── */}
-      {ordersLoading ? (
-        <div className="rounded-2xl bg-white/5 p-8 text-center">
-          <p className="text-slate-400">جاري تحميل البرنامج...</p>
-        </div>
-      ) : sortedOrders.length === 0 ? (
-        <div className="rounded-2xl bg-white/5 p-8 text-center">
-          <p className="text-4xl mb-3">✅</p>
-          <p className="font-bold text-slate-200">لا توجد طلبات معينة لك اليوم.</p>
-          <p className="mt-1 text-sm text-slate-400">تواصل مع الإدارة للحصول على برنامجك.</p>
-        </div>
+      {ordersLoading && orders.length === 0 ? (
+        <p className="rounded-2xl bg-white/5 p-8 text-center">جاري تحميل البرنامج...</p>
       ) : (
         <div className="space-y-4">
-          {sortedOrders.map((order, index) => {
-            const isCompleted = DONE_STATUSES.has(order.status);
-            const isCurrent = order.id === currentStop?.id;
-            const actions = DRIVER_STATUS_ACTIONS[order.status as OrderStatus] ?? [];
-            const stopNum = index + 1;
+          {PROGRAM_GROUPS.map(({ key, label }) => {
+            const groupOrders = visibleOrders.filter(order => programGroup(order.status) === key);
+            const isRoute = key === "pickup" || key === "delivery";
+            const sorted = isRoute
+              ? sortByRouteOrder(groupOrders, driverLocation?.lat, driverLocation?.lng)
+              : groupOrders.sort((a, b) => (programSlot(a).time ?? "99:99").localeCompare(programSlot(b).time ?? "99:99") || a.id - b.id);
+            const cards = sorted.map((order, index) => {
+              const isCompleted = key === "done";
+              const isCurrent = isRoute && index === 0;
+              const actions = DRIVER_STATUS_ACTIONS[order.status] ?? [];
+              const stopNum = index + 1;
+              const slot = programSlot(order);
 
-            return (
-              <div
-                key={order.id}
-                className={`overflow-hidden rounded-2xl border transition-all ${
-                  isCurrent
-                    ? "border-cyan-500/60 bg-cyan-950/20 shadow-lg shadow-cyan-950/30"
-                    : isCompleted
-                    ? "border-white/5 bg-white/3 opacity-60"
-                    : "border-white/10 bg-white/5"
-                }`}
-              >
-                {/* Stop header */}
+              return (
                 <div
-                  className={`flex items-center justify-between px-4 py-3 border-b ${
+                  key={order.id}
+                  className={`overflow-hidden rounded-2xl border transition-all ${
                     isCurrent
-                      ? "border-cyan-500/30 bg-cyan-500/10"
-                      : "border-white/5 bg-white/5"
+                      ? "border-cyan-500/60 bg-cyan-950/20 shadow-lg shadow-cyan-950/30"
+                      : isCompleted
+                      ? "border-white/5 bg-white/3 opacity-60"
+                      : "border-white/10 bg-white/5"
                   }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <span
-                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-                        isCompleted
-                          ? "bg-green-600/30 text-green-400"
-                          : isCurrent
-                          ? "bg-cyan-600 text-white"
-                          : "bg-slate-700 text-white"
-                      }`}
-                    >
-                      {isCompleted ? "✓" : stopNum}
-                    </span>
-                    <div>
-                      <p className="text-[11px] text-slate-400">محطة {stopNum}</p>
-                      <p className="font-mono font-bold text-cyan-300 text-base leading-tight">
-                        {order.order_number || `NQ-${order.id}`}
-                      </p>
-                    </div>
-                  </div>
-                  <span
-                    className={`rounded-full border px-2.5 py-1 text-xs font-bold ${
-                      STATUS_BADGE[order.status as OrderStatus] ??
-                      "border-white/20 bg-white/10 text-white"
+                  {/* Stop header */}
+                  <div
+                    className={`flex items-center justify-between px-4 py-3 border-b ${
+                      isCurrent
+                        ? "border-cyan-500/30 bg-cyan-500/10"
+                        : "border-white/5 bg-white/5"
                     }`}
                   >
-                    {STATUS_LABELS[order.status as OrderStatus] ?? order.status}
-                  </span>
-                </div>
-
-                {/* Order details */}
-                <div className="space-y-2.5 p-4 text-sm">
-                  <div className="flex gap-2">
-                    <span className="w-16 shrink-0 text-slate-400">الاسم</span>
-                    <span className="font-bold text-base">{order.customer_name}</span>
+                    <div className="flex items-center gap-3">
+                      <span
+                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+                          isCompleted
+                            ? "bg-green-600/30 text-green-400"
+                            : isCurrent
+                            ? "bg-cyan-600 text-white"
+                            : "bg-slate-700 text-white"
+                        }`}
+                      >
+                        {isCompleted ? "✓" : stopNum}
+                      </span>
+                      <div>
+                        <p className="text-[11px] text-slate-400">محطة {stopNum}</p>
+                        <p className="font-mono font-bold text-cyan-300 text-base leading-tight">
+                          {order.order_number || `NQ-${order.id}`}
+                        </p>
+                      </div>
+                    </div>
+                    <span
+                      className={`rounded-full border px-2.5 py-1 text-xs font-bold ${
+                        STATUS_BADGE[order.status as OrderStatus] ??
+                        "border-white/20 bg-white/10 text-white"
+                      }`}
+                    >
+                      {STATUS_LABELS[order.status as OrderStatus] ?? order.status}
+                    </span>
                   </div>
-                  <div className="flex gap-2">
-                    <span className="w-16 shrink-0 text-slate-400">الهاتف</span>
+
+                  {/* Order details */}
+                  <div className="space-y-2.5 p-4 text-sm">
+                    <div className="flex gap-2">
+                      <span className="w-16 shrink-0 text-slate-400">الاسم</span>
+                      <span className="font-bold text-base">{order.customer_name}</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <span className="w-16 shrink-0 text-slate-400">الهاتف</span>
+                      <a
+                        href={`tel:${order.phone}`}
+                        className="font-medium text-cyan-400 underline underline-offset-2"
+                      >
+                        {order.phone}
+                      </a>
+                    </div>
+                    {order.address && (
+                      <div className="flex gap-2">
+                        <span className="w-16 shrink-0 text-slate-400">العنوان</span>
+                        <span>{order.address}</span>
+                      </div>
+                    )}
+                    {slot.date && (
+                      <div className="flex gap-2">
+                        <span className="w-16 shrink-0 text-slate-400">الموعد</span>
+                        <span>
+                          {slot.date}
+                          {slot.time && ` — ${slot.time}`}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <span className="w-16 shrink-0 text-slate-400">الخدمة</span>
+                      <span>{order.service_type}</span>
+                    </div>
+                    {order.notes && (
+                      <div className="flex gap-2">
+                        <span className="w-16 shrink-0 text-slate-400">ملاحظات</span>
+                        <span className="text-yellow-200">{order.notes}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Utility buttons: Maps / Call / WhatsApp */}
+                  <div className="flex gap-2 px-4 pb-3">
+                    {order.google_maps_link && (
+                      <a
+                        href={order.google_maps_link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-blue-700 py-3 text-sm font-bold hover:bg-blue-600 active:scale-95"
+                      >
+                        📍 الخريطة
+                      </a>
+                    )}
                     <a
                       href={`tel:${order.phone}`}
-                      className="font-medium text-cyan-400 underline underline-offset-2"
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-slate-700 py-3 text-sm font-bold hover:bg-slate-600 active:scale-95"
                     >
-                      {order.phone}
+                      📞 اتصال
                     </a>
-                  </div>
-                  {order.address && (
-                    <div className="flex gap-2">
-                      <span className="w-16 shrink-0 text-slate-400">العنوان</span>
-                      <span>{order.address}</span>
-                    </div>
-                  )}
-                  {order.pickup_date && (
-                    <div className="flex gap-2">
-                      <span className="w-16 shrink-0 text-slate-400">الموعد</span>
-                      <span>
-                        {order.pickup_date}
-                        {order.pickup_time && ` — ${order.pickup_time.slice(0, 5)}`}
-                      </span>
-                    </div>
-                  )}
-                  <div className="flex gap-2">
-                    <span className="w-16 shrink-0 text-slate-400">الخدمة</span>
-                    <span>{order.service_type}</span>
-                  </div>
-                  {order.notes && (
-                    <div className="flex gap-2">
-                      <span className="w-16 shrink-0 text-slate-400">ملاحظات</span>
-                      <span className="text-yellow-200">{order.notes}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Utility buttons: Maps / Call / WhatsApp */}
-                <div className="flex gap-2 px-4 pb-3">
-                  {order.google_maps_link && (
                     <a
-                      href={order.google_maps_link}
+                      href={whatsappUrl(order.phone, `مرحبا، أنا سائق مغسلة النقاء. أنا بتواصل معك بخصوص ${key === "pickup" ? "استلام" : "توصيل"} طلبك رقم ${order.order_number || `NQ-${order.id}`}.`)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-blue-700 py-3 text-sm font-bold hover:bg-blue-600 active:scale-95"
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-green-700 py-3 text-sm font-bold hover:bg-green-600 active:scale-95"
                     >
-                      📍 الخريطة
+                      💬 واتساب
                     </a>
-                  )}
-                  <a
-                    href={`tel:${order.phone}`}
-                    className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-slate-700 py-3 text-sm font-bold hover:bg-slate-600 active:scale-95"
-                  >
-                    📞 اتصال
-                  </a>
-                  <a
-                    href={whatsappUrl(order.phone, `مرحبا، أنا سائق مغسلة النقاء. أنا في الطريق لاستلام طلبك رقم ${order.order_number || `NQ-${order.id}`}.`)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-green-700 py-3 text-sm font-bold hover:bg-green-600 active:scale-95"
-                  >
-                    💬 واتساب
-                  </a>
-                </div>
-
-                {/* Status action buttons */}
-                {actions.length > 0 && (
-                  <div className="flex gap-2 px-4 pb-4">
-                    {actions.map((action) => (
-                      <button
-                        key={action.next}
-                        onClick={() => updateStatus(order, action.next)}
-                        disabled={updating === order.id}
-                        className={`flex-1 rounded-xl py-4 text-base font-bold text-white transition-all active:scale-95 disabled:opacity-50 ${action.color}`}
-                      >
-                        {updating === order.id ? "..." : action.label}
-                      </button>
-                    ))}
                   </div>
-                )}
-              </div>
-            );
+
+                  {/* Status action buttons */}
+                  {actions.length > 0 && (
+                    <div className="flex gap-2 px-4 pb-4">
+                      {actions.map((action) => (
+                        <button
+                          key={action.next}
+                          onClick={() => updateStatus(order, action.next)}
+                          disabled={updating === order.id}
+                          className={`flex-1 rounded-xl py-4 text-base font-bold text-white transition-all active:scale-95 disabled:opacity-50 ${action.color}`}
+                        >
+                          {updating === order.id ? "..." : action.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            });
+            const content = <div className="space-y-3 px-3 pb-3">{cards.length ? cards : <p className="text-sm text-slate-400">لا توجد طلبات</p>}</div>;
+            const heading = <>{label} <span className="text-sm text-slate-400">({sorted.length})</span></>;
+            if (key === "ready") {
+              return <details key={key} className="rounded-2xl border border-white/10 bg-white/5">
+                <summary className="cursor-pointer p-4 font-bold">{heading}</summary>
+                {content}
+              </details>;
+            }
+            return <section key={key} className="rounded-2xl border border-white/10 bg-white/5">
+              <h2 className="p-4 font-bold">{heading}</h2>
+              {content}
+            </section>;
           })}
         </div>
       )}

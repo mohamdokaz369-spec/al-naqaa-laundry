@@ -107,3 +107,5 @@ console.log('Booking calendar checks passed: closing boundary, future days after
  handlers.notificationclick({notification:{close(){}},waitUntil:p=>{done=p;}});await done;assert.equal(opened,'/admin/orders');
  console.log('Background push checks passed: visible notification, deduplication tag and fixed same-site destination.');
 })().catch(error=>{console.error(error);process.exitCode=1;});
+
+require('./driver-accounts.cjs');
